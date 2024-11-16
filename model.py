@@ -1,0 +1,265 @@
+from torch import nn
+import torch
+from transformers import AutoTokenizer, AutoModel, AutoConfig
+import numpy as np
+import datetime
+from collections import defaultdict, Counter
+
+from utils import Get_subwords_mask
+
+
+class Biaffine(nn.Module):
+    def __init__(self, n_in, n_out=1, bias_x=True, bias_y=True, scale=0):
+        super().__init__()
+        self.n_in = n_in
+        self.n_out = n_out
+        self.bias_x = bias_x
+        self.bias_y = bias_y
+        self.scale = scale
+        self.weight = nn.Parameter(torch.zeros(n_out, n_in + bias_x, n_in + bias_y))
+
+    def forward(self, x, y):
+        if self.bias_x:
+            x = torch.cat((x, torch.ones_like(x[..., :1])), -1)
+        if self.bias_y:
+            y = torch.cat((y, torch.ones_like(y[..., :1])), -1)
+        s = torch.einsum('bxi,oij,byj->boxy', x, self.weight, y)
+        return s.squeeze(1) / self.n_in ** self.scale
+
+
+class Dependency_Parsing(nn.Module):
+    def __init__(self, train_dataset, dev_dataset, test_dataset, embedding_type='bert', embedding_name=None,
+                 arc_mlp=500, label_mlp=100, drop_out=0.33,
+                 batch_size=32, learning_rate=5e-5, lr_rate=10, device=None):
+        super().__init__()
+        if embedding_type == 'bert':
+            self.tokenizer = AutoTokenizer.from_pretrained(embedding_name)
+            self.encoder_config = AutoConfig.from_pretrained(embedding_name)
+        self.embedding_type = embedding_type
+        self.embedding_name = embedding_name
+        self.arc_mlp = arc_mlp
+        self.label_mlp = label_mlp
+        self.drop_out = drop_out
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.lr_rate = lr_rate
+        self.device = device
+        torch.set_default_device(self.device)
+        self.train_dataset = self.Data_Preprocess(train_dataset, init=True)
+        self.dev_dataset = self.Data_Preprocess(dev_dataset)
+        self.test_dataset = self.Data_Preprocess(test_dataset)
+        self.Build()
+
+    def Data_Preprocess(self, dataset, init=False):
+        if init is True:
+            self.pos_tag_vocab = dataset.pos_tag_vocab
+            self.label_vocab = dataset.label_vocab
+            self.domain_vocab = dataset.domain_vocab
+            self.use_domain = dataset.use_domain
+        data = []
+        for sentence in dataset.data:
+            tokenized_words = self.tokenizer.tokenize(' '.join(sentence['words']))
+            if len(tokenized_words) + 2 > self.encoder_config.max_position_embeddings:
+                continue
+            origin_masks = Get_subwords_mask(sentence['words'], tokenized_words)
+            encoded_words = self.tokenizer(' '.join(sentence['words']))['input_ids']
+            encoded_heads = sentence['heads']
+            encoded_labels = [dataset.label_vocab[label] for label in sentence['labels']]
+            new_sen = dict(
+                {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'mask': origin_masks})
+            if self.use_domain:
+                new_sen['domain'] = dataset.domain_vocab[sentence['domain']]
+            data.append(new_sen)
+        return data
+
+    def Build(self):
+        # Encoder layer
+        if self.embedding_type == 'bert':
+            self.encoder = AutoModel.from_pretrained(self.embedding_name)
+        # MLP layer
+        self.head_mlp_arc = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.arc_mlp),
+                                          nn.Dropout(self.drop_out), nn.ReLU())
+        self.dep_mlp_arc = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.arc_mlp),
+                                         nn.Dropout(self.drop_out), nn.ReLU())
+        self.head_mlp_label = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.label_mlp),
+                                            nn.Dropout(self.drop_out), nn.ReLU())
+        self.dep_mlp_label = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.label_mlp),
+                                           nn.Dropout(self.drop_out), nn.ReLU())
+        # Biaffine layer
+        self.biaffine_arc = Biaffine(n_in=self.arc_mlp, n_out=1, bias_x=True, bias_y=False)
+        self.biaffine_label = Biaffine(n_in=self.label_mlp, n_out=len(self.label_vocab), bias_x=True, bias_y=True)
+        # Loss function
+        self.loss_fn = nn.CrossEntropyLoss()
+        # Optimizer
+        self.optimizer = torch.optim.AdamW(
+            params=[{'params': p, 'lr': self.learning_rate * (1 if n.startswith('encoder') else self.lr_rate)}
+                    for n, p in self.named_parameters()], betas=(0.9, 0.999), lr=self.learning_rate, weight_decay=0)
+
+    def forward(self, data):
+        # Split data
+        words = [sentence['words'] for sentence in data]
+        heads = [sentence['heads'] for sentence in data]
+        labels = [sentence['labels'] for sentence in data]
+        masks = [sentence['mask'] for sentence in data]
+        if self.use_domain:
+            domains = [sentence['domain'] for sentence in data]
+
+        # Get length after padding
+        n_sentences = len(data)
+        max_word_len = max([len(sentence) for sentence in words])
+        from torch.nn.functional import pad
+        # Padding
+        word_paddings = torch.stack([pad(torch.tensor(word), (0, max_word_len - len(word)), value=0) for word in words])
+        head_paddings = torch.stack([pad(torch.tensor(head), (0, max_word_len - len(head)), value=0) for head in heads])
+        label_paddings = torch.stack(
+            [pad(torch.tensor(label), (0, max_word_len - len(label)), value=0) for label in labels])
+        mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
+        attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
+
+        # Getting contexual embedding
+        if self.embedding_type == 'bert':
+            embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
+            new_embedding_output = torch.stack([torch.cat((embedding[padding],
+                                                           torch.zeros(max_word_len - len(embedding[padding]),
+                                                                       self.encoder_config.hidden_size))) for
+                                                embedding, padding in zip(embedding_output, mask_paddings)])
+            embedding_output = new_embedding_output
+
+        # Send the embedding into MLPs
+        arc_head = self.head_mlp_arc(embedding_output)
+        arc_dep = self.dep_mlp_arc(embedding_output)
+        label_head = self.head_mlp_label(embedding_output)
+        label_dep = self.dep_mlp_label(embedding_output)
+        # Biaffine attention
+        arc_scores = self.biaffine_arc(arc_dep, arc_head)
+        label_scores = self.biaffine_label(label_dep, label_head)
+        label_scores = label_scores.permute(0, 2, 3, 1)
+        # Unmask
+        mask_paddings = torch.flatten(torch.tensor(mask_paddings))
+        unmasked_arc_scores = torch.flatten(arc_scores, 0, 1)[mask_paddings]
+        unmasked_label_scores = torch.flatten(label_scores, 0, 1)[mask_paddings]
+        unmasked_head_paddings = torch.flatten(head_paddings, 0, 1)[mask_paddings]
+        unmasked_label_paddings = torch.flatten(label_paddings, 0, 1)[mask_paddings]
+        unmasked_label_scores = unmasked_label_scores[
+            [torch.arange(len(unmasked_head_paddings)), unmasked_head_paddings]]
+        # Calculate loss
+
+        arc_loss = self.loss_fn(unmasked_arc_scores, unmasked_head_paddings)
+        label_loss = self.loss_fn(unmasked_label_scores, unmasked_label_paddings)
+        loss = arc_loss + label_loss
+
+        # Get predicted heads & labels
+        predicted_heads = unmasked_arc_scores.argmax(1)
+        predicted_labels = unmasked_label_scores.argmax(1)
+
+        # Counting correct heads & labels
+        correct_heads = int((predicted_heads == unmasked_head_paddings).sum())
+        correct_labels = int((predicted_labels == unmasked_label_paddings).sum())
+        n_words = mask_paddings.sum()
+        # print('uas:', correct_heads/n_words*100)
+        # print('las:', correct_labels/n_words*100)
+
+        return loss
+
+    def evaluate(self, data):
+        # Turn off gradient
+        with torch.no_grad():
+            # Split data
+            words = [sentence['words'] for sentence in data]
+            heads = [sentence['heads'] for sentence in data]
+            labels = [sentence['labels'] for sentence in data]
+            masks = [sentence['mask'] for sentence in data]
+            if self.use_domain:
+                domains = [sentence['domain'] for sentence in data]
+
+            # Get length after padding
+            n_sentences = len(data)
+            max_word_len = max([len(sentence) for sentence in words])
+            from torch.nn.functional import pad
+            # Padding
+            word_paddings = torch.stack(
+                [pad(torch.tensor(word), (0, max_word_len - len(word)), value=0) for word in words])
+            head_paddings = torch.stack(
+                [pad(torch.tensor(head), (0, max_word_len - len(head)), value=0) for head in heads])
+            label_paddings = torch.stack(
+                [pad(torch.tensor(label), (0, max_word_len - len(label)), value=0) for label in labels])
+            mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
+            attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
+
+            # Getting contexual embedding
+            if self.embedding_type == 'bert':
+                embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
+                new_embedding_output = torch.stack([torch.cat((embedding[padding],
+                                                               torch.zeros(max_word_len - len(embedding[padding]),
+                                                                           self.encoder_config.hidden_size))) for
+                                                    embedding, padding in zip(embedding_output, mask_paddings)])
+                embedding_output = new_embedding_output
+
+            # Send the embedding into MLPs
+            arc_head = self.head_mlp_arc(embedding_output)
+            arc_dep = self.dep_mlp_arc(embedding_output)
+            label_head = self.head_mlp_label(embedding_output)
+            label_dep = self.dep_mlp_label(embedding_output)
+            # Biaffine attention
+            arc_scores = self.biaffine_arc(arc_dep, arc_head)
+            label_scores = self.biaffine_label(label_dep, label_head).permute(0, 2, 3, 1)
+            # Unmask
+            mask_paddings = torch.flatten(torch.tensor(mask_paddings))
+            unmasked_arc_scores = torch.flatten(arc_scores, 0, 1)[mask_paddings]
+            unmasked_label_scores = torch.flatten(label_scores, 0, 1)[mask_paddings]
+            unmasked_head_paddings = torch.flatten(head_paddings, 0, 1)[mask_paddings]
+            unmasked_label_paddings = torch.flatten(label_paddings, 0, 1)[mask_paddings]
+
+            # Get predicted heads & labels
+            predicted_heads = unmasked_arc_scores.argmax(-1)
+            unmasked_label_scores = unmasked_label_scores[[torch.arange(len(predicted_heads)), predicted_heads]]
+            predicted_labels = unmasked_label_scores.argmax(-1)
+
+            # Counting correct heads & labels
+            correct_heads = int((predicted_heads == unmasked_head_paddings).sum())
+            correct_labels = int(
+                ((predicted_labels == unmasked_label_paddings) & (predicted_heads == unmasked_head_paddings)).sum())
+
+            n_words = int(mask_paddings.sum())
+            return (n_words, correct_heads, correct_labels)
+
+    def Train(self, n_epochs):
+        self.train()
+        n_batches = (len(self.train_dataset) + self.batch_size - 1) // self.batch_size
+        print('Number of batches:', n_batches)
+        train_records = defaultdict(list)
+        for epoch_id in range(n_epochs):
+            stats = Counter()
+            start_time = datetime.datetime.now()
+            np.random.shuffle(self.train_dataset)
+            for batch in range(0, len(self.train_dataset), self.batch_size):
+                data = self.data[batch:min(batch + self.batch_size, len(self.train_dataset))]
+                loss = self(data)
+                stats['train_loss'] += loss.item()
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+                # print('Batch:',1+batch//self.batch_size,'Loss:',loss.item(),'Time:',datetime.datetime.now()-start_time)
+            avg_loss = stats['train_loss'] / n_batches
+            print(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
+
+    def Eval(self, dataset):
+        self.eval()
+        data = self.Data_Preprocess(dataset, init = False)
+        n_batches = (len(self.data) + self.batch_size - 1) // self.batch_size
+        print('Number of batches:', n_batches)
+        records = defaultdict(int)
+        for batch in range(0, len(self.data), self.batch_size):
+            start_time = datetime.datetime.now()
+            data = self.data[batch:min(batch + self.batch_size, len(self.data))]
+            n_words, correct_heads, correct_labels = self.evaluate(data)
+            records['words'] += n_words
+            records['correct_heads'] += correct_heads
+            records['correct_labels'] += correct_labels
+            # records['loss'] += loss.item()
+        uas = records['correct_heads'] / records['words'] * 100
+        las = records['correct_labels'] / records['words'] * 100
+        # loss = records['loss'] / n_batches
+        print('uas:', uas)
+        print('las:', las)
+        # print('loss:', loss)
