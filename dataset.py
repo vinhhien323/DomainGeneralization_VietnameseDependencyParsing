@@ -17,7 +17,6 @@ class Dataset:
             self.domain_vocab = None
         np.random.shuffle(self.data)
 
-    @staticmethod
     def Read(self, input_file, use_domain=False):
         file = open(input_file, 'r', encoding='utf-8')
         if use_domain is True:
@@ -52,19 +51,16 @@ class Dataset:
         file.close()
         return data
 
-    @staticmethod
     def Create_pos_tag_vocab(self, data):
         pos_tag_list = set(tag for sentence in data for tag in sentence['pos_tags'])
         pos_tag_vocab = dict({tag: id for id, tag in enumerate(pos_tag_list)})
         return pos_tag_vocab
 
-    @staticmethod
     def Create_label_vocab(self, data):
         label_list = set(label for sentence in data for label in sentence['labels'])
         label_vocab = dict({label: id for id, label in enumerate(label_list)})
         return label_vocab
 
-    @staticmethod
     def Create_domain_vocab(self, data):
         domain_list = set(sentence['domain'] for sentence in data)
         domain_vocab = dict({domain: id for id, domain in enumerate(domain_list)})
