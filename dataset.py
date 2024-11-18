@@ -1,3 +1,5 @@
+import numpy as np
+
 class Dataset:
     def __init__(self, directory, folder=False, use_domain=False):
         if folder is True:
