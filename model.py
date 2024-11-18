@@ -233,7 +233,7 @@ class Dependency_Parsing(nn.Module):
             start_time = datetime.datetime.now()
             np.random.shuffle(self.train_dataset)
             for batch in range(0, len(self.train_dataset), self.batch_size):
-                data = self.data[batch:min(batch + self.batch_size, len(self.train_dataset))]
+                data = self.train_dataset[batch:min(batch + self.batch_size, len(self.train_dataset))]
                 loss = self(data)
                 stats['train_loss'] += loss.item()
                 self.optimizer.zero_grad()
