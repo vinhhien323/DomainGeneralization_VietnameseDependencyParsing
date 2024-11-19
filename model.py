@@ -42,9 +42,9 @@ class Dependency_Parsing(nn.Module):
         self.learning_rate = args.learning_rate
         self.lr_rate = args.lr_rate
         self.device = args.device
-        self.train_dataset = self.Data_Preprocess(Dataset(directory = args.train_dir, use_folder = args.train_use_folder, use_domain = args.train_use_domain, init=True))
-        self.dev_dataset = self.Data_Preprocess(Dataset(directory = args.dev_dir, use_folder = args.dev_use_folder, use_domain = args.dev_use_domain, init=False))
-        self.test_dataset = self.Data_Preprocess(Dataset(directory = args.test_dir, use_folder = args.test_use_folder, use_domain = args.test_use_domain, init=False))
+        self.train_dataset = self.Data_Preprocess(Dataset(directory = args.train_dir, use_folder = args.train_use_folder, use_domain = args.train_use_domain), init=True)
+        self.dev_dataset = self.Data_Preprocess(Dataset(directory = args.dev_dir, use_folder = args.dev_use_folder, use_domain = args.dev_use_domain), init=False)
+        self.test_dataset = self.Data_Preprocess(Dataset(directory = args.test_dir, use_folder = args.test_use_folder, use_domain = args.test_use_domain), init=False)
         self.Build()
         if 'cuda' in self.device:
             self.cuda()
