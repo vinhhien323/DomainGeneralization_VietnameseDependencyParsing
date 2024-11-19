@@ -73,7 +73,7 @@ class Dependency_Parsing(nn.Module):
 
     def Build(self):
         # Encoder layer
-        if self.embedding_type == 'bert':
+        if self.embedding_type == 'roberta':
             self.encoder = AutoModel.from_pretrained(self.embedding_name)
         # MLP layer
         self.head_mlp_arc = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.arc_mlp),
@@ -116,7 +116,7 @@ class Dependency_Parsing(nn.Module):
         attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
 
         # Getting contexual embedding
-        if self.embedding_type == 'bert':
+        if self.embedding_type == 'roberta':
             embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
             new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                            torch.zeros(max_word_len - len(embedding[padding]),
@@ -186,7 +186,7 @@ class Dependency_Parsing(nn.Module):
             attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
 
             # Getting contexual embedding
-            if self.embedding_type == 'bert':
+            if self.embedding_type == 'roberta':
                 embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
                 new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                                torch.zeros(max_word_len - len(embedding[padding]),
