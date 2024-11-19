@@ -28,27 +28,26 @@ class Biaffine(nn.Module):
 
 
 class Dependency_Parsing(nn.Module):
-    def __init__(self, train_dataset, dev_dataset, test_dataset, embedding_type='bert', embedding_name=None,
-                 arc_mlp=500, label_mlp=100, drop_out=0.33,
-                 batch_size=32, learning_rate=5e-5, lr_rate=10, device=None):
+    def __init__(self, args):
         super().__init__()
-        if embedding_type == 'bert':
-            self.tokenizer = AutoTokenizer.from_pretrained(embedding_name)
-            self.encoder_config = AutoConfig.from_pretrained(embedding_name)
-        self.embedding_type = embedding_type
-        self.embedding_name = embedding_name
-        self.arc_mlp = arc_mlp
-        self.label_mlp = label_mlp
-        self.drop_out = drop_out
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
-        self.lr_rate = lr_rate
-        self.device = device
-        torch.set_default_device(self.device)
-        self.train_dataset = self.Data_Preprocess(train_dataset, init=True)
-        self.dev_dataset = self.Data_Preprocess(dev_dataset)
-        self.test_dataset = self.Data_Preprocess(test_dataset)
+        if args.embedding_type == 'roberta':
+            self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
+            self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
+        self.embedding_type = args.embedding_type
+        self.embedding_name = args.embedding_name
+        self.arc_mlp = args.arc_mlp
+        self.label_mlp = args.label_mlp
+        self.drop_out = args.drop_out
+        self.batch_size = args.batch_size
+        self.learning_rate = args.learning_rate
+        self.lr_rate = args.lr_rate
+        self.device = args.device
+        self.train_dataset = self.Data_Preprocess(directory = args.train_dir, use_folder = args.train_use_folder, use_domain = args.train_use_domain, init=True)
+        self.dev_dataset = self.Data_Preprocess(directory = args.dev_dir, use_folder = args.dev_use_folder, use_domain = args.dev_use_domain, init=False)
+        self.test_dataset = self.Data_Preprocess(directory = args.test_dir, use_folder = args.test_use_folder, use_domain = args.test_use_domain, init=False)
         self.Build()
+        if 'cuda' in self.device:
+            self.cuda()
 
     def Data_Preprocess(self, dataset, init=False):
         if init is True:

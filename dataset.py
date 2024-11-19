@@ -1,8 +1,8 @@
 import numpy as np
 
 class Dataset:
-    def __init__(self, directory, folder=False, use_domain=False):
-        if folder is True:
+    def __init__(self, directory, use_folder=False, use_domain=False):
+        if use_folder is True:
             import glob
             file_list = glob.glob(f'{directory}/*.conllu')
         else:
