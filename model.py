@@ -8,6 +8,7 @@ from collections import defaultdict, Counter
 from utils import Get_subwords_mask
 from dataset import Dataset
 
+
 class Biaffine(nn.Module):
     def __init__(self, n_in, n_out=1, bias_x=True, bias_y=True, scale=0):
         super().__init__()
@@ -42,9 +43,14 @@ class Dependency_Parsing(nn.Module):
         self.learning_rate = args.learning_rate
         self.lr_rate = args.lr_rate
         self.device = args.device
-        self.train_dataset = self.Data_Preprocess(Dataset(directory = args.train_dir, use_folder = args.train_use_folder, use_domain = args.train_use_domain), init=True)
-        self.dev_dataset = self.Data_Preprocess(Dataset(directory = args.dev_dir, use_folder = args.dev_use_folder, use_domain = args.dev_use_domain), init=False)
-        self.test_dataset = self.Data_Preprocess(Dataset(directory = args.test_dir, use_folder = args.test_use_folder, use_domain = args.test_use_domain), init=False)
+        self.train_dataset = self.Data_Preprocess(
+            Dataset(directory=args.train_dir, use_folder=args.train_use_folder, use_domain=args.train_use_domain),
+            init=True)
+        self.dev_dataset = self.Data_Preprocess(
+            Dataset(directory=args.dev_dir, use_folder=args.dev_use_folder, use_domain=args.dev_use_domain), init=False)
+        self.test_dataset = self.Data_Preprocess(
+            Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
+            init=False)
         self.Build()
         if 'cuda' in self.device:
             self.cuda()
@@ -226,7 +232,8 @@ class Dependency_Parsing(nn.Module):
         self.train()
         n_batches = (len(self.train_dataset) + self.batch_size - 1) // self.batch_size
         print('Number of batches:', n_batches)
-        train_records = defaultdict(list)
+        best_dev_uas, best_dev_las, best_test_uas, best_test_las = 0, 0, 0, 0
+        best_epoch = 0
         for epoch_id in range(n_epochs):
             stats = Counter()
             start_time = datetime.datetime.now()
@@ -241,10 +248,24 @@ class Dependency_Parsing(nn.Module):
                 # print('Batch:',1+batch//self.batch_size,'Loss:',loss.item(),'Time:',datetime.datetime.now()-start_time)
             avg_loss = stats['train_loss'] / n_batches
             print(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
+            dev_uas, dev_las = self.Eval(self.dev_dataset)
+            test_uas, test_las = self.Eval(self.test_dataset)
+            print(f'Dev  set:\tUAS: {dev_uas}\tLAS: {dev_las}')
+            print(f'Test set:\tUAS: {test_uas}\tLAS: {test_las}')
+            if dev_las > best_dev_las:
+                best_dev_uas = dev_uas
+                best_dev_las = dev_las
+                best_test_uas = test_uas
+                best_test_las = test_las
+                best_epoch = epoch_id+1
+                print('New best record is saved.')
+        print(f'Best record on epoch {best_epoch}:')
+        print(f'Dev  set:\tUAS: {best_dev_uas}\tLAS: {best_dev_las}')
+        print(f'Test set:\tUAS: {best_test_uas}\tLAS: {best_test_las}')
 
     def Eval(self, dataset):
         self.eval()
-        data = self.Data_Preprocess(dataset, init = False)
+        data = self.Data_Preprocess(dataset, init=False)
         n_batches = (len(self.data) + self.batch_size - 1) // self.batch_size
         print('Number of batches:', n_batches)
         records = defaultdict(int)
@@ -255,10 +276,6 @@ class Dependency_Parsing(nn.Module):
             records['words'] += n_words
             records['correct_heads'] += correct_heads
             records['correct_labels'] += correct_labels
-            # records['loss'] += loss.item()
         uas = records['correct_heads'] / records['words'] * 100
         las = records['correct_labels'] / records['words'] * 100
-        # loss = records['loss'] / n_batches
-        print('uas:', uas)
-        print('las:', las)
-        # print('loss:', loss)
+        return uas, las
