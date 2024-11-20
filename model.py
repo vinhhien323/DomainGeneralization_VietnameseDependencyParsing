@@ -250,8 +250,8 @@ class Dependency_Parsing(nn.Module):
             print(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
             dev_uas, dev_las = self.Eval(self.dev_dataset)
             test_uas, test_las = self.Eval(self.test_dataset)
-            print(f'Dev  set:\tUAS: {dev_uas}\tLAS: {dev_las}')
-            print(f'Test set:\tUAS: {test_uas}\tLAS: {test_las}')
+            print(f'Dev  set:\tUAS: {round(dev_uas,2)}\tLAS: {round(dev_las,2)}')
+            print(f'Test set:\tUAS: {round(test_uas,2)}\tLAS: {round(test_las,2)}')
             if dev_las > best_dev_las:
                 best_dev_uas = dev_uas
                 best_dev_las = dev_las
@@ -260,8 +260,8 @@ class Dependency_Parsing(nn.Module):
                 best_epoch = epoch_id + 1
                 print('New best record is saved.')
         print(f'Best record on epoch {best_epoch}:')
-        print(f'Dev  set:\tUAS: {best_dev_uas}\tLAS: {best_dev_las}')
-        print(f'Test set:\tUAS: {best_test_uas}\tLAS: {best_test_las}')
+        print(f'Dev  set:\tUAS: {round(best_dev_uas,2)}\tLAS: {round(best_dev_las,2)}')
+        print(f'Test set:\tUAS: {round(best_test_uas,2)}\tLAS: {round(best_test_las,2)}')
 
     def Eval(self, dataset, require_preprocessing=False):
         self.eval()
@@ -270,7 +270,8 @@ class Dependency_Parsing(nn.Module):
         else:
             eval_data = dataset
         n_batches = (len(eval_data) + self.batch_size - 1) // self.batch_size
-        print('Number of batches:', n_batches)
+        if require_preprocessing:
+            print('Number of batches:', n_batches)
         records = defaultdict(int)
         for batch in range(0, len(eval_data), self.batch_size):
             start_time = datetime.datetime.now()

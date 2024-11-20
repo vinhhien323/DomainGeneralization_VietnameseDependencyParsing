@@ -31,6 +31,7 @@ if __name__ == "__main__":
     config.add_argument('--batch_size', action='store', default=32)
     config.add_argument('--learning_rate', action='store', default=5e-5)
     config.add_argument('--lr_rate', action='store', default=10)
+    config.add_argument('--n_epochs', action='store', default=5)
 
     # Device arguments
     config.add_argument('--device', action='store', default='cpu')
@@ -40,4 +41,4 @@ if __name__ == "__main__":
 
     # Call dependency models
     parser = Dependency_Parsing(args)
-    parser.Train(n_epochs=3)
+    parser.Train(n_epochs=args.n_epochs)
