@@ -229,12 +229,12 @@ class Dependency_Parsing(nn.Module):
             return (n_words, correct_heads, correct_labels)
 
     def Train(self, n_epochs):
-        self.train()
         n_batches = (len(self.train_dataset) + self.batch_size - 1) // self.batch_size
         print('Number of batches:', n_batches)
         best_dev_uas, best_dev_las, best_test_uas, best_test_las = 0, 0, 0, 0
         best_epoch = 0
         for epoch_id in range(n_epochs):
+            self.train()
             stats = Counter()
             start_time = datetime.datetime.now()
             np.random.shuffle(self.train_dataset)
