@@ -257,21 +257,24 @@ class Dependency_Parsing(nn.Module):
                 best_dev_las = dev_las
                 best_test_uas = test_uas
                 best_test_las = test_las
-                best_epoch = epoch_id+1
+                best_epoch = epoch_id + 1
                 print('New best record is saved.')
         print(f'Best record on epoch {best_epoch}:')
         print(f'Dev  set:\tUAS: {best_dev_uas}\tLAS: {best_dev_las}')
         print(f'Test set:\tUAS: {best_test_uas}\tLAS: {best_test_las}')
 
-    def Eval(self, dataset):
+    def Eval(self, dataset, require_preprocessing=False):
         self.eval()
-        data = self.Data_Preprocess(dataset, init=False)
-        n_batches = (len(self.data) + self.batch_size - 1) // self.batch_size
+        if require_preprocessing:
+            eval_data = self.Data_Preprocess(dataset, init=False)
+        else:
+            eval_data = dataset
+        n_batches = (len(eval_data) + self.batch_size - 1) // self.batch_size
         print('Number of batches:', n_batches)
         records = defaultdict(int)
-        for batch in range(0, len(self.data), self.batch_size):
+        for batch in range(0, len(eval_data), self.batch_size):
             start_time = datetime.datetime.now()
-            data = self.data[batch:min(batch + self.batch_size, len(self.data))]
+            data = eval_data[batch:min(batch + self.batch_size, len(eval_data))]
             n_words, correct_heads, correct_labels = self.evaluate(data)
             records['words'] += n_words
             records['correct_heads'] += correct_heads
