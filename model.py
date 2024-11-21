@@ -69,9 +69,10 @@ class Dependency_Parsing(nn.Module):
             origin_masks = Get_subwords_mask(sentence['words'], tokenized_words)
             encoded_words = self.tokenizer(' '.join(sentence['words']))['input_ids']
             encoded_heads = sentence['heads']
-            encoded_labels = [dataset.label_vocab[label] for label in sentence['labels']]
+            encoded_labels = [self.label_vocab[label] for label in sentence['labels']]
+            encoded_pos_tags = [self.pos_tag_vocab[pos_tag] for pos_tag in sentence['pos_tags']]
             new_sen = dict(
-                {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'mask': origin_masks})
+                {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'pos_tags': encoded_pos_tags, 'mask': origin_masks})
             if self.use_domain:
                 new_sen['domain'] = dataset.domain_vocab[sentence['domain']]
             data.append(new_sen)
