@@ -1,7 +1,7 @@
 def Get_subwords_mask(sentence, subword_list):
     # Get the mask to convert the output of BERT Embedding from subword-level to word-level.
     # For each word, we will keep the LAST subword and remove others.
-    padding = [False]
+    padding = []
     pos = 0
     word = ''
     for subword in subword_list:
@@ -17,6 +17,6 @@ def Get_subwords_mask(sentence, subword_list):
             padding.append(False)
     assert(pos == len(sentence))
     assert(word == '')
-    padding = padding + [False]
+    padding = padding
     return padding
 

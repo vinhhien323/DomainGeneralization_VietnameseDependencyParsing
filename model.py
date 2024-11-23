@@ -75,6 +75,8 @@ class Dependency_Parsing(nn.Module):
             if len(tokenized_words) + 2 > self.embedding_max_len:
                 continue
             origin_masks = Get_subwords_mask(sentence['words'], tokenized_words)
+            if self.embedding_type == 'roberta':
+                origin_masks = [False] + origin_masks + [False]
             encoded_words = self.tokenizer(' '.join(sentence['words']))['input_ids']
             encoded_heads = sentence['heads']
             encoded_labels = [self.label_vocab[label] for label in sentence['labels']]
