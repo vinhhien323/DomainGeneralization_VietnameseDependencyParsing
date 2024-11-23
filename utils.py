@@ -7,6 +7,7 @@ def Get_subwords_mask(sentence, subword_list):
     for subword in subword_list:
         if len(subword) > 2 and subword[-2:] == '@@':
             subword = subword[:-2]
+        subword = subword.replace('Ġ','')
         word += subword
         if word == sentence[pos]:
             padding.append(True)
