@@ -23,6 +23,7 @@ if __name__ == "__main__":
     # Embedding arguments
     config.add_argument('--embedding_type', action='store', default='roberta', type=str)
     config.add_argument('--embedding_name', action='store', default='', type=str)
+    config.add_argument('--embedding_max_len', action='store', default=256, type=int)
 
     # Model parameters
     config.add_argument('--arc_mlp', action='store', default=500, type=int)

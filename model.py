@@ -31,9 +31,6 @@ class Biaffine(nn.Module):
 class Dependency_Parsing(nn.Module):
     def __init__(self, args):
         super().__init__()
-        if args.embedding_type == 'roberta':
-            self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
-            self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
         self.embedding_type = args.embedding_type
         self.embedding_name = args.embedding_name
         self.arc_mlp = args.arc_mlp
@@ -42,7 +39,18 @@ class Dependency_Parsing(nn.Module):
         self.batch_size = args.batch_size
         self.learning_rate = args.learning_rate
         self.lr_rate = args.lr_rate
+        self.embedding_max_len = args.embedding_max_len
+
+        if args.embedding_type == 'roberta':
+            self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
+            self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
+            self.embedding_max_len = min(self.embedding_max_len, self.encoder_config.max_position_embeddings)
+        if args.embedding_type == 'mamba':
+            self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
+            self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
+
         self.device = args.device
+
         self.train_dataset = self.Data_Preprocess(
             Dataset(directory=args.train_dir, use_folder=args.train_use_folder, use_domain=args.train_use_domain),
             init=True)
@@ -64,7 +72,7 @@ class Dependency_Parsing(nn.Module):
         data = []
         for sentence in dataset.data:
             tokenized_words = self.tokenizer.tokenize(' '.join(sentence['words']))
-            if len(tokenized_words) + 2 > self.encoder_config.max_position_embeddings:
+            if len(tokenized_words) + 2 > self.embedding_max_len:
                 continue
             origin_masks = Get_subwords_mask(sentence['words'], tokenized_words)
             encoded_words = self.tokenizer(' '.join(sentence['words']))['input_ids']
