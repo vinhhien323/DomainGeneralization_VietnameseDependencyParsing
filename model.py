@@ -5,7 +5,7 @@ import numpy as np
 import datetime
 from collections import defaultdict, Counter
 
-from utils import Get_subwords_mask
+from utils import Get_subwords_mask_RoBERTa, Get_subwords_mask_BERT, Get_subwords_mask_PhoBERT
 from dataset import Dataset
 
 
@@ -42,13 +42,20 @@ class Dependency_Parsing(nn.Module):
         self.embedding_max_len = args.embedding_max_len
 
         if args.embedding_type == 'roberta':
+            self.get_mask = Get_subwords_mask_RoBERTa
+            if 'phobert' in args.embedding_name:
+                self.get_mask = Get_subwords_mask_PhoBERT
             self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
             self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
             self.embedding_max_len = min(self.embedding_max_len, self.encoder_config.max_position_embeddings)
         if args.embedding_type == 'mamba':
+            self.get_mask = Get_subwords_mask_RoBERTa
             self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
             self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
-
+        if args.embedding_type == 'bert':
+            self.get_mask = Get_subwords_mask_BERT
+            self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
+            self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
         self.device = args.device
 
         self.train_dataset = self.Data_Preprocess(
@@ -74,8 +81,8 @@ class Dependency_Parsing(nn.Module):
             tokenized_words = self.tokenizer.tokenize(' '.join(sentence['words']))
             if len(tokenized_words) + 2 > self.embedding_max_len:
                 continue
-            origin_masks = Get_subwords_mask(sentence['words'], tokenized_words)
-            if self.embedding_type == 'roberta':
+            origin_masks = self.get_mask(sentence['words'], tokenized_words)
+            if self.embedding_type in ['bert','roberta']:
                 origin_masks = [False] + origin_masks + [False]
             encoded_words = self.tokenizer(' '.join(sentence['words']))['input_ids']
             encoded_heads = sentence['heads']
@@ -90,7 +97,7 @@ class Dependency_Parsing(nn.Module):
 
     def Build(self):
         # Encoder layer
-        if self.embedding_type in ['roberta','mamba']:
+        if self.embedding_type in ['bert','roberta','mamba']:
             self.encoder = AutoModel.from_pretrained(self.embedding_name)
         # MLP layer
         self.head_mlp_arc = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.arc_mlp),
@@ -133,7 +140,7 @@ class Dependency_Parsing(nn.Module):
         attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
 
         # Getting contexual embedding
-        if self.embedding_type in ['roberta','mamba']:
+        if self.embedding_type in ['bert','roberta','mamba']:
             embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
             new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                            torch.zeros(max_word_len - len(embedding[padding]),
@@ -203,7 +210,7 @@ class Dependency_Parsing(nn.Module):
             attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
 
             # Getting contexual embedding
-            if self.embedding_type in ['roberta','mamba']:
+            if self.embedding_type in ['bert','roberta','mamba']:
                 embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
                 new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                                torch.zeros(max_word_len - len(embedding[padding]),
