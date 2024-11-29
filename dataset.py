@@ -6,12 +6,12 @@ class Dataset:
             file_list = glob.glob(f'{directory}/*.conllu')
         else:
             file_list = [directory]
+        self.use_domain = use_domain
         self.data = []
         for file in file_list:
-            self.data += self.Read(file, use_domain)
+            self.data += self.Read(file)
         self.pos_tag_vocab = self.Create_pos_tag_vocab(self.data)
         self.label_vocab = self.Create_label_vocab(self.data)
-        self.use_domain = use_domain
         if self.use_domain:
             self.domain_vocab = self.Create_domain_vocab(self.data)
         else:

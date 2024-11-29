@@ -48,7 +48,6 @@ class Dependency_Parsing(nn.Module):
         self.lr_rate = args.lr_rate
 
         # GRL parameters
-        self.use_domain = args.use_domain
         self.use_grl = args.use_grl
         self.grl_theta = args.grl_theta
         self.grl_loss_rate = args.grl_loss_rate
@@ -162,7 +161,7 @@ class Dependency_Parsing(nn.Module):
         mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
         attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
         if self.use_grl:
-            domain_paddings = [[domain]*max_word_len for domain in domains]
+            domain_paddings = torch.tensor([[domain]*max_word_len for domain in domains])
 
         # Getting contexual embedding
         if self.embedding_type in ['bert', 'roberta', 'mamba']:
