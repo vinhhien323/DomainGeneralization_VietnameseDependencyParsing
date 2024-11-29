@@ -124,12 +124,16 @@ class Dependency_Parsing(nn.Module):
 
         # Gradient reversal layer
         if self.use_grl:
+            """
             self.GRL = nn.Sequential(GradientReversal(alpha=self.grl_theta),
                                      nn.Linear(self.encoder_config.hidden_size, len(self.domain_vocab)),
                                      nn.ReLU(),
                                      nn.Linear(len(self.domain_vocab), len(self.domain_vocab)),
                                      nn.Softmax())
-
+            """
+            self.GRL = nn.Sequential(GradientReversal(alpha=self.grl_theta),
+                                     nn.Linear(self.encoder_config.hidden_size, len(self.domain_vocab)),
+                                     nn.ReLU())
         # Biaffine layer
         self.biaffine_arc = Biaffine(n_in=self.arc_mlp, n_out=1, bias_x=True, bias_y=False)
         self.biaffine_label = Biaffine(n_in=self.label_mlp, n_out=len(self.label_vocab), bias_x=True, bias_y=True)
