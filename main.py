@@ -34,6 +34,11 @@ if __name__ == "__main__":
     config.add_argument('--lr_rate', action='store', default=10, type=float)
     config.add_argument('--n_epochs', action='store', default=5, type=int)
 
+    # GRL parameters
+    config.add_argument('--use_grl', action='store', default=False, type=bool)
+    config.add_argument('--grl_theta', action='store', default=1e-5, type=float)
+    config.add_argument('--grl_loss_rate', action='store', default=0.001, type=float)
+
     # Device arguments
     config.add_argument('--device', action='store', default='cpu', type=str)
 

@@ -1,4 +1,3 @@
-import numpy as np
 
 class Dataset:
     def __init__(self, directory, use_folder=False, use_domain=False):
@@ -17,11 +16,10 @@ class Dataset:
             self.domain_vocab = self.Create_domain_vocab(self.data)
         else:
             self.domain_vocab = None
-        np.random.shuffle(self.data)
 
-    def Read(self, input_file, use_domain=False):
+    def Read(self, input_file):
         file = open(input_file, 'r', encoding='utf-8')
-        if use_domain is True:
+        if self.use_domain is True:
             domain_name = input_file.split('/')[-1].replace('.conllu', '')
         data = []
         words = []
@@ -33,7 +31,7 @@ class Dataset:
             if len(line) != 10:
                 if len(words) > 0:
                     sentence = dict({'words': words, 'pos_tags': pos_tags, 'heads': heads, 'labels': labels})
-                    if use_domain is True:
+                    if self.use_domain is True:
                         sentence['domain'] = domain_name
                     data.append(sentence)
                     words = []
@@ -47,7 +45,7 @@ class Dataset:
             labels.append(line[7])
         if len(words) > 0:
             sentence = dict({'words': words, 'pos_tags': pos_tags, 'heads': heads, 'labels': labels})
-            if use_domain is True:
+            if self.use_domain is True:
                 sentence['domain'] = domain_name
             data.append(sentence)
         file.close()

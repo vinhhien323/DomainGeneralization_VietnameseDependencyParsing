@@ -7,6 +7,7 @@ from collections import defaultdict, Counter
 
 from utils import Get_subwords_mask_RoBERTa, Get_subwords_mask_BERT, Get_subwords_mask_PhoBERT
 from dataset import Dataset
+from gradient_reversal import GradientReversal
 
 
 class Biaffine(nn.Module):
@@ -31,15 +32,26 @@ class Biaffine(nn.Module):
 class Dependency_Parsing(nn.Module):
     def __init__(self, args):
         super().__init__()
+        # Encoding parameters
         self.embedding_type = args.embedding_type
         self.embedding_name = args.embedding_name
+        self.embedding_max_len = args.embedding_max_len
+
+        # MLP parameters
         self.arc_mlp = args.arc_mlp
         self.label_mlp = args.label_mlp
         self.drop_out = args.drop_out
+
+        # Training parameters
         self.batch_size = args.batch_size
         self.learning_rate = args.learning_rate
         self.lr_rate = args.lr_rate
-        self.embedding_max_len = args.embedding_max_len
+
+        # GRL parameters
+        self.use_domain = args.use_domain
+        self.use_grl = args.use_grl
+        self.grl_theta = args.grl_theta
+        self.grl_loss_rate = args.grl_loss_rate
 
         if args.embedding_type == 'roberta':
             self.get_mask = Get_subwords_mask_RoBERTa
@@ -82,14 +94,15 @@ class Dependency_Parsing(nn.Module):
             if len(tokenized_words) + 2 > self.embedding_max_len:
                 continue
             origin_masks = self.get_mask(sentence['words'], tokenized_words)
-            if self.embedding_type in ['bert','roberta']:
+            if self.embedding_type in ['bert', 'roberta']:
                 origin_masks = [False] + origin_masks + [False]
             encoded_words = self.tokenizer(' '.join(sentence['words']))['input_ids']
             encoded_heads = sentence['heads']
             encoded_labels = [self.label_vocab[label] for label in sentence['labels']]
             encoded_pos_tags = [self.pos_tag_vocab[pos_tag] for pos_tag in sentence['pos_tags']]
             new_sen = dict(
-                {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'pos_tags': encoded_pos_tags, 'mask': origin_masks})
+                {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'pos_tags': encoded_pos_tags,
+                 'mask': origin_masks})
             if self.use_domain:
                 new_sen['domain'] = dataset.domain_vocab[sentence['domain']]
             data.append(new_sen)
@@ -97,7 +110,7 @@ class Dependency_Parsing(nn.Module):
 
     def Build(self):
         # Encoder layer
-        if self.embedding_type in ['bert','roberta','mamba']:
+        if self.embedding_type in ['bert', 'roberta', 'mamba']:
             self.encoder = AutoModel.from_pretrained(self.embedding_name)
         # MLP layer
         self.head_mlp_arc = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.arc_mlp),
@@ -108,11 +121,21 @@ class Dependency_Parsing(nn.Module):
                                             nn.Dropout(self.drop_out), nn.ReLU())
         self.dep_mlp_label = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.label_mlp),
                                            nn.Dropout(self.drop_out), nn.ReLU())
+
+        # Gradient reversal layer
+        if self.use_grl:
+            self.GRL = nn.Sequential(GradientReversal(alpha=self.grl_theta),
+                                     nn.Linear(self.encoder_config.hidden_size, len(self.domain_vocab)),
+                                     nn.ReLU(),
+                                     nn.Linear(len(self.domain_vocab), len(self.domain_vocab)),
+                                     nn.Softmax())
+
         # Biaffine layer
         self.biaffine_arc = Biaffine(n_in=self.arc_mlp, n_out=1, bias_x=True, bias_y=False)
         self.biaffine_label = Biaffine(n_in=self.label_mlp, n_out=len(self.label_vocab), bias_x=True, bias_y=True)
         # Loss function
         self.loss_fn = nn.CrossEntropyLoss()
+
         # Optimizer
         self.optimizer = torch.optim.AdamW(
             params=[{'params': p, 'lr': self.learning_rate * (1 if n.startswith('encoder') else self.lr_rate)}
@@ -124,7 +147,7 @@ class Dependency_Parsing(nn.Module):
         heads = [sentence['heads'] for sentence in data]
         labels = [sentence['labels'] for sentence in data]
         masks = [sentence['mask'] for sentence in data]
-        if self.use_domain:
+        if self.use_grl:
             domains = [sentence['domain'] for sentence in data]
 
         # Get length after padding
@@ -138,9 +161,11 @@ class Dependency_Parsing(nn.Module):
             [pad(torch.tensor(label), (0, max_word_len - len(label)), value=0) for label in labels])
         mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
         attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
+        if self.use_grl:
+            domain_paddings = [[domain]*max_word_len for domain in domains]
 
         # Getting contexual embedding
-        if self.embedding_type in ['bert','roberta','mamba']:
+        if self.embedding_type in ['bert', 'roberta', 'mamba']:
             embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
             new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                            torch.zeros(max_word_len - len(embedding[padding]),
@@ -157,6 +182,11 @@ class Dependency_Parsing(nn.Module):
         arc_scores = self.biaffine_arc(arc_dep, arc_head)
         label_scores = self.biaffine_label(label_dep, label_head)
         label_scores = label_scores.permute(0, 2, 3, 1)
+
+        # GRL transformation
+        if self.use_grl:
+            domain_scores = self.GRL(embedding_output)
+
         # Unmask
         mask_paddings = torch.flatten(torch.tensor(mask_paddings))
         unmasked_arc_scores = torch.flatten(arc_scores, 0, 1)[mask_paddings]
@@ -165,11 +195,19 @@ class Dependency_Parsing(nn.Module):
         unmasked_label_paddings = torch.flatten(label_paddings, 0, 1)[mask_paddings]
         unmasked_label_scores = unmasked_label_scores[
             [torch.arange(len(unmasked_head_paddings)), unmasked_head_paddings]]
+
+        if self.use_grl:
+            unmasked_domain_scores = torch.flatten(domain_scores, 0, 1)[mask_paddings]
+            unmasked_domain_paddings = torch.flatten(domain_paddings, 0, 1)[mask_paddings]
         # Calculate loss
 
         arc_loss = self.loss_fn(unmasked_arc_scores, unmasked_head_paddings)
         label_loss = self.loss_fn(unmasked_label_scores, unmasked_label_paddings)
         loss = arc_loss + label_loss
+
+        if self.use_grl:
+            grl_loss = self.loss_fn(unmasked_domain_scores, unmasked_domain_paddings)
+            loss = loss + self.grl_loss_rate*grl_loss
 
         # Get predicted heads & labels
         predicted_heads = unmasked_arc_scores.argmax(1)
@@ -210,7 +248,7 @@ class Dependency_Parsing(nn.Module):
             attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
 
             # Getting contexual embedding
-            if self.embedding_type in ['bert','roberta','mamba']:
+            if self.embedding_type in ['bert', 'roberta', 'mamba']:
                 embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
                 new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                                torch.zeros(max_word_len - len(embedding[padding]),
@@ -268,8 +306,8 @@ class Dependency_Parsing(nn.Module):
             print(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
             dev_uas, dev_las = self.Eval(self.dev_dataset)
             test_uas, test_las = self.Eval(self.test_dataset)
-            print(f'Dev  set:\tUAS: {round(dev_uas,2)}\tLAS: {round(dev_las,2)}')
-            print(f'Test set:\tUAS: {round(test_uas,2)}\tLAS: {round(test_las,2)}')
+            print(f'Dev  set:\tUAS: {round(dev_uas, 2)}\tLAS: {round(dev_las, 2)}')
+            print(f'Test set:\tUAS: {round(test_uas, 2)}\tLAS: {round(test_las, 2)}')
             if dev_las > best_dev_las:
                 best_dev_uas = dev_uas
                 best_dev_las = dev_las
@@ -278,8 +316,8 @@ class Dependency_Parsing(nn.Module):
                 best_epoch = epoch_id + 1
                 print('New best record is saved.')
         print(f'Best record on epoch {best_epoch}:')
-        print(f'Dev  set:\tUAS: {round(best_dev_uas,2)}\tLAS: {round(best_dev_las,2)}')
-        print(f'Test set:\tUAS: {round(best_test_uas,2)}\tLAS: {round(best_test_las,2)}')
+        print(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
+        print(f'Test set:\tUAS: {round(best_test_uas, 2)}\tLAS: {round(best_test_las, 2)}')
 
     def Eval(self, dataset, require_preprocessing=False):
         self.eval()
