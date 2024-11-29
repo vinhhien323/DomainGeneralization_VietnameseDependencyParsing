@@ -102,7 +102,7 @@ class Dependency_Parsing(nn.Module):
             new_sen = dict(
                 {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'pos_tags': encoded_pos_tags,
                  'mask': origin_masks})
-            if self.use_domain:
+            if dataset.use_domain:
                 new_sen['domain'] = dataset.domain_vocab[sentence['domain']]
             data.append(new_sen)
         return data
