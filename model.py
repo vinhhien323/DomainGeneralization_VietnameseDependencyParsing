@@ -51,6 +51,7 @@ class Dependency_Parsing(nn.Module):
         self.use_grl = args.use_grl
         self.grl_theta = args.grl_theta
         self.grl_loss_rate = args.grl_loss_rate
+        self.eval_with_grl = args.eval_with_grl
 
         if args.embedding_type == 'roberta':
             self.get_mask = Get_subwords_mask_RoBERTa
@@ -229,7 +230,7 @@ class Dependency_Parsing(nn.Module):
             heads = [sentence['heads'] for sentence in data]
             labels = [sentence['labels'] for sentence in data]
             masks = [sentence['mask'] for sentence in data]
-            if self.use_domain:
+            if self.eval_with_grl:
                 domains = [sentence['domain'] for sentence in data]
 
             # Get length after padding
