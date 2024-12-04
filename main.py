@@ -2,7 +2,6 @@ import argparse
 import torch
 from model import Biaffine, Dependency_Parsing
 
-
 if __name__ == "__main__":
     config = argparse.ArgumentParser(description='Configuration for Biaffine Dependency Parsing')
     # Train set arguments
@@ -44,6 +43,10 @@ if __name__ == "__main__":
     config.add_argument('--device', action='store', default='cpu', type=str)
 
     args = config.parse_args()
+    args_list = [f'{i}: {j}' for i, j in vars(args).items()]
+    print('Model arguments:')
+    for arg in args_list:
+        print(arg)
     torch.set_default_device(args.device)
 
     # Call dependency models
