@@ -288,9 +288,9 @@ class Dependency_Parsing(nn.Module):
             n_words = int(mask_paddings.sum())
             return (n_words, correct_heads, correct_labels)
 
-    def Train(self, n_epochs):
+    def Train(self, n_epochs, logger):
         n_batches = (len(self.train_dataset) + self.batch_size - 1) // self.batch_size
-        print('Number of batches:', n_batches)
+        logger.info(f'Number of batches: {n_batches}')
         best_dev_uas, best_dev_las, best_test_uas, best_test_las = 0, 0, 0, 0
         best_epoch = 0
         for epoch_id in range(n_epochs):
@@ -305,23 +305,22 @@ class Dependency_Parsing(nn.Module):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                # print('Batch:',1+batch//self.batch_size,'Loss:',loss.item(),'Time:',datetime.datetime.now()-start_time)
             avg_loss = stats['train_loss'] / n_batches
-            print(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
+            logger.info(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
             dev_uas, dev_las = self.Eval(self.dev_dataset)
             test_uas, test_las = self.Eval(self.test_dataset)
-            print(f'Dev  set:\tUAS: {round(dev_uas, 2)}\tLAS: {round(dev_las, 2)}')
-            print(f'Test set:\tUAS: {round(test_uas, 2)}\tLAS: {round(test_las, 2)}')
+            logger.info(f'Dev  set:\tUAS: {round(dev_uas, 2)}\tLAS: {round(dev_las, 2)}')
+            logger.info(f'Test set:\tUAS: {round(test_uas, 2)}\tLAS: {round(test_las, 2)}')
             if dev_las > best_dev_las:
                 best_dev_uas = dev_uas
                 best_dev_las = dev_las
                 best_test_uas = test_uas
                 best_test_las = test_las
                 best_epoch = epoch_id + 1
-                print('New best record is saved.')
-        print(f'Best record on epoch {best_epoch}:')
-        print(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
-        print(f'Test set:\tUAS: {round(best_test_uas, 2)}\tLAS: {round(best_test_las, 2)}')
+                logger.info('New best record is saved.')
+        logger.info(f'Best record on epoch {best_epoch}:')
+        logger.info(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
+        logger.info(f'Test set:\tUAS: {round(best_test_uas, 2)}\tLAS: {round(best_test_las, 2)}')
 
     def Eval(self, dataset, require_preprocessing=False):
         self.eval()

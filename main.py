@@ -46,19 +46,21 @@ if __name__ == "__main__":
 
     # Train arguments
     config.add_argument('--mode', choices=['train', 'evaluate', 'test'], required=True, help= 'Model mode')
-    config.add_argument('--model_name', action='store', default='', type=str)
+    config.add_argument('--model_name', action='store', required=True, type=str)
 
     args = config.parse_args()
 
-    log_file = args.model_name + str(datetime.now()).replace(' ', '-') + '.log'
-    logging.basicConfig(filename=log_file, level=logging.INFO)
+    logger = logging.getLogger('')
+    logging.basicConfig(level=logging.INFO, format='%(message)s', handlers=[logging.FileHandler(args.model_name + '.log'), logging.StreamHandler()])
     args_list = [f'{i}: {j}' for i, j in vars(args).items()]
-    print('Model arguments:')
+    logger.info('Model arguments:')
     for arg in args_list:
-        print(arg)
-    torch.set_default_device(args.device)
+        logger.info(arg)
+    logger.info('\n---------------------------------')
 
     # Call dependency models
-
+    torch.set_default_device(args.device)
     parser = Dependency_Parsing(args)
-    parser.Train(n_epochs=args.n_epochs)
+    logger.info(parser)
+    logger.info('\n---------------------------------')
+    parser.Train(n_epochs=args.n_epochs, logger = logger)
