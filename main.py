@@ -50,6 +50,8 @@ if __name__ == "__main__":
 
     args = config.parse_args()
 
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
     logger = logging.getLogger('')
     logging.basicConfig(level=logging.INFO, format='%(message)s', handlers=[logging.FileHandler(args.model_name + '.log'), logging.StreamHandler()])
     args_list = [f'{i}: {j}' for i, j in vars(args).items()]
