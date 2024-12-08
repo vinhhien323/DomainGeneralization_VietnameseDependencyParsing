@@ -1,4 +1,3 @@
-
 class Dataset:
     def __init__(self, directory, use_folder=False, use_domain=False):
         if use_folder:
@@ -53,13 +52,15 @@ class Dataset:
 
     def Create_pos_tag_vocab(self, data):
         pos_tag_list = set(tag for sentence in data for tag in sentence['pos_tags'])
-        #Add feature to handle dataset without pos-tags
+        # Add feature to handle dataset without pos-tags
         pos_tag_list.add('_')
+        pos_tag_list = sorted(pos_tag_list)
         pos_tag_vocab = dict({tag: id for id, tag in enumerate(pos_tag_list)})
         return pos_tag_vocab
 
     def Create_label_vocab(self, data):
         label_list = set(label for sentence in data for label in sentence['labels'])
+        label_list = sorted(label_list)
         label_vocab = dict({label: id for id, label in enumerate(label_list)})
         return label_vocab
 

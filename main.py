@@ -1,6 +1,7 @@
 import argparse
 import torch
 from model import Dependency_Parsing
+from dataset import Dataset
 import logging
 from datetime import datetime
 
@@ -20,6 +21,12 @@ if __name__ == "__main__":
     config.add_argument('--test_dir', action='store', default='', type=str)
     config.add_argument('--test_use_domain', action='store_true')
     config.add_argument('--test_use_folder', action='store_true')
+
+    # Evaluate arguments
+    config.add_argument('--eval_dir', action='store', default='', type=str)
+    config.add_argument('--eval_use_domain', action='store_true')
+    config.add_argument('--eval_use_folder', action='store_true')
+    config.add_argument('--eval_require_preprocessing', action='store_false')
 
     # Embedding arguments
     config.add_argument('--embedding_type', action='store', default='roberta', type=str)
@@ -47,6 +54,7 @@ if __name__ == "__main__":
     # Train arguments
     config.add_argument('--mode', choices=['train', 'evaluate', 'test'], required=True, help= 'Model mode')
     config.add_argument('--model_name', action='store', required=True, type=str)
+    config.add_argument('--save_dir', action='store', default='./', type = str)
 
     args = config.parse_args()
 
@@ -58,11 +66,20 @@ if __name__ == "__main__":
     logger.info('Model arguments:')
     for arg in args_list:
         logger.info(arg)
-    logger.info('\n---------------------------------')
+    logger.info('---------------------------------')
 
-    # Call dependency models
+    # Call the biaffine model
     torch.set_default_device(args.device)
     parser = Dependency_Parsing(args)
     logger.info(parser)
-    logger.info('\n---------------------------------')
-    parser.Train(n_epochs=args.n_epochs, logger = logger)
+    logger.info('---------------------------------')
+
+    if args.mode == 'train':
+      save_dir = f'{args.save_dir}/{args.model_name}.bin'
+      parser.Train(n_epochs=args.n_epochs, logger = logger, save_dir = save_dir)
+
+    if args.mode == 'evaluate':
+      save_dir = f'{args.save_dir}/{args.model_name}.bin'
+      parser.load_state_dict(torch.load(save_dir, weights_only=False), strict=False)
+      eval_dataset = Dataset(directory = args.eval_dir, use_folder= args.eval_use_folder, use_domain= args.eval_use_domain)
+      parser.Eval(dataset = eval_dataset, require_preprocessing=args.eval_require_preprocessing, logger=logger)

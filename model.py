@@ -166,7 +166,7 @@ class Dependency_Parsing(nn.Module):
         mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
         attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
         if self.use_grl:
-            domain_paddings = torch.tensor([[domain]*max_word_len for domain in domains])
+            domain_paddings = torch.tensor([[domain] * max_word_len for domain in domains])
 
         # Getting contexual embedding
         if self.embedding_type in ['bert', 'roberta', 'mamba']:
@@ -211,7 +211,7 @@ class Dependency_Parsing(nn.Module):
 
         if self.use_grl:
             grl_loss = self.loss_fn(unmasked_domain_scores, unmasked_domain_paddings)
-            loss = loss + self.grl_loss_rate*grl_loss
+            loss = loss + self.grl_loss_rate * grl_loss
 
         # Get predicted heads & labels
         predicted_heads = unmasked_arc_scores.argmax(1)
@@ -288,7 +288,8 @@ class Dependency_Parsing(nn.Module):
             n_words = int(mask_paddings.sum())
             return (n_words, correct_heads, correct_labels)
 
-    def Train(self, n_epochs, logger):
+    def Train(self, n_epochs, logger, save_dir=None):
+        # If save_dir is None, model will not be saved.
         n_batches = (len(self.train_dataset) + self.batch_size - 1) // self.batch_size
         logger.info(f'Number of batches: {n_batches}')
         best_dev_uas, best_dev_las, best_test_uas, best_test_las = 0, 0, 0, 0
@@ -318,19 +319,22 @@ class Dependency_Parsing(nn.Module):
                 best_test_las = test_las
                 best_epoch = epoch_id + 1
                 logger.info('New best record is saved.')
+                if save_dir is not None:
+                    torch.save(self.state_dict(), save_dir)
         logger.info(f'Best record on epoch {best_epoch}:')
         logger.info(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
         logger.info(f'Test set:\tUAS: {round(best_test_uas, 2)}\tLAS: {round(best_test_las, 2)}')
 
-    def Eval(self, dataset, require_preprocessing=False):
+    def Eval(self, dataset, require_preprocessing=False, logger=None):
         self.eval()
         if require_preprocessing:
             eval_data = self.Data_Preprocess(dataset, init=False)
         else:
             eval_data = dataset
         n_batches = (len(eval_data) + self.batch_size - 1) // self.batch_size
-        if require_preprocessing:
-            print('Number of batches:', n_batches)
+        if logger is not None:
+            logger.info('Starting evaluation process:')
+            logger.info(f'Number of batches: {n_batches}')
         records = defaultdict(int)
         for batch in range(0, len(eval_data), self.batch_size):
             start_time = datetime.datetime.now()
@@ -341,4 +345,7 @@ class Dependency_Parsing(nn.Module):
             records['correct_labels'] += correct_labels
         uas = records['correct_heads'] / records['words'] * 100
         las = records['correct_labels'] / records['words'] * 100
+        if logger is not None:
+            logger.info(f'UAS: {round(uas, 2)}')
+            logger.info(f'LAS: {round(las, 2)}')
         return uas, las
