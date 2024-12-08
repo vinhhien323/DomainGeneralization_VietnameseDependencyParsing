@@ -53,6 +53,8 @@ class Dataset:
 
     def Create_pos_tag_vocab(self, data):
         pos_tag_list = set(tag for sentence in data for tag in sentence['pos_tags'])
+        #Add feature to handle dataset without pos-tags
+        pos_tag_list.add('_')
         pos_tag_vocab = dict({tag: id for id, tag in enumerate(pos_tag_list)})
         return pos_tag_vocab
 
