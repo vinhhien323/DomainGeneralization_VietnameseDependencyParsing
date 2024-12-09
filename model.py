@@ -70,7 +70,7 @@ class Dependency_Parsing(nn.Module):
             self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
         self.device = args.device
         self.model_save_dir = f'{args.save_dir}/{args.model_name}.bin'
-        self.label_save_dir = f'{args.save_dir}/{args.model_name}.label.json'
+        self.config_save_dir = f'{args.save_dir}/{args.model_name}.config.json'
 
         if args.mode == 'train':
             self.train_dataset = self.Data_Preprocess(
@@ -83,7 +83,10 @@ class Dependency_Parsing(nn.Module):
                 init=False)
         if args.mode in ['evaluate', 'test']:
             self.load_state_dict(torch.load(self.save_dir, weights_only=False), strict=False)
-
+            config = json.load(open(self.config_save_dir))
+            self.pos_tag_vocab = config['pos_tag_vocab']
+            self.label_vocab = config['label_vocab']
+            self.domain_vocab = config['domain_vocab']
         self.Build()
         if 'cuda' in self.device:
             self.cuda()
@@ -326,8 +329,9 @@ class Dependency_Parsing(nn.Module):
                 best_epoch = epoch_id + 1
                 logger.info('New best record is saved.')
                 torch.save(self.state_dict(), self.model_save_dir)
-        with open(self.label_save_dir, 'w') as out_file:
-            json.dump(self.label_vocab, out_file)
+        with open(self.config_save_dir, 'w') as out_file:
+            config_data = {'pos_tag_vocab': self.pos_tag_vocab, 'label_vocab': self.label_vocab, 'domain_vocab': self.domain_vocab}
+            json.dump(config_data, out_file)
         logger.info(f'Best record on epoch {best_epoch}:')
         logger.info(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
         logger.info(f'Test set:\tUAS: {round(best_test_uas, 2)}\tLAS: {round(best_test_las, 2)}')

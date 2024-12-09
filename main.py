@@ -79,8 +79,6 @@ if __name__ == "__main__":
         parser.Train(n_epochs=args.n_epochs, logger=logger)
 
     if args.mode == 'evaluate':
-        save_dir = f'{args.save_dir}/{args.model_name}.bin'
-        parser.load_state_dict(torch.load(save_dir, weights_only=False), strict=False)
         eval_dataset = Dataset(directory=args.eval_dir, use_folder=args.eval_use_folder,
                                use_domain=args.eval_use_domain)
         parser.Eval(dataset=eval_dataset, require_preprocessing=args.eval_require_preprocessing, logger=logger)
