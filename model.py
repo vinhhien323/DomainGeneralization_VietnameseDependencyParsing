@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModel, AutoConfig
 import numpy as np
 import datetime
 from collections import defaultdict, Counter
-
+import  json
 from utils import Get_subwords_mask_RoBERTa, Get_subwords_mask_BERT, Get_subwords_mask_PhoBERT
 from dataset import Dataset
 from gradient_reversal import GradientReversal
@@ -69,15 +69,21 @@ class Dependency_Parsing(nn.Module):
             self.tokenizer = AutoTokenizer.from_pretrained(args.embedding_name)
             self.encoder_config = AutoConfig.from_pretrained(args.embedding_name)
         self.device = args.device
+        self.model_save_dir = f'{args.save_dir}/{args.model_name}.bin'
+        self.label_save_dir = f'{args.save_dir}/{args.model_name}.label.json'
 
-        self.train_dataset = self.Data_Preprocess(
-            Dataset(directory=args.train_dir, use_folder=args.train_use_folder, use_domain=args.train_use_domain),
-            init=True)
-        self.dev_dataset = self.Data_Preprocess(
-            Dataset(directory=args.dev_dir, use_folder=args.dev_use_folder, use_domain=args.dev_use_domain), init=False)
-        self.test_dataset = self.Data_Preprocess(
-            Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
-            init=False)
+        if args.mode == 'train':
+            self.train_dataset = self.Data_Preprocess(
+                Dataset(directory=args.train_dir, use_folder=args.train_use_folder, use_domain=args.train_use_domain),
+                init=True)
+            self.dev_dataset = self.Data_Preprocess(
+                Dataset(directory=args.dev_dir, use_folder=args.dev_use_folder, use_domain=args.dev_use_domain), init=False)
+            self.test_dataset = self.Data_Preprocess(
+                Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
+                init=False)
+        if args.mode in ['evaluate', 'test']:
+            self.load_state_dict(torch.load(self.save_dir, weights_only=False), strict=False)
+
         self.Build()
         if 'cuda' in self.device:
             self.cuda()
@@ -288,7 +294,7 @@ class Dependency_Parsing(nn.Module):
             n_words = int(mask_paddings.sum())
             return (n_words, correct_heads, correct_labels)
 
-    def Train(self, n_epochs, logger, save_dir=None):
+    def Train(self, n_epochs, logger):
         # If save_dir is None, model will not be saved.
         n_batches = (len(self.train_dataset) + self.batch_size - 1) // self.batch_size
         logger.info(f'Number of batches: {n_batches}')
@@ -319,8 +325,9 @@ class Dependency_Parsing(nn.Module):
                 best_test_las = test_las
                 best_epoch = epoch_id + 1
                 logger.info('New best record is saved.')
-                if save_dir is not None:
-                    torch.save(self.state_dict(), save_dir)
+                torch.save(self.state_dict(), self.model_save_dir)
+        with open(self.label_save_dir, 'w') as out_file:
+            json.dump(self.label_vocab, out_file)
         logger.info(f'Best record on epoch {best_epoch}:')
         logger.info(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
         logger.info(f'Test set:\tUAS: {round(best_test_uas, 2)}\tLAS: {round(best_test_las, 2)}')
