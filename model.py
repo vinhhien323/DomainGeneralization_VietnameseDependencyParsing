@@ -82,12 +82,13 @@ class Dependency_Parsing(nn.Module):
                 Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
                 init=False)
         if args.mode in ['evaluate', 'test']:
-            self.load_state_dict(torch.load(self.save_dir, weights_only=False), strict=False)
             config = json.load(open(self.config_save_dir))
             self.pos_tag_vocab = config['pos_tag_vocab']
             self.label_vocab = config['label_vocab']
             self.domain_vocab = config['domain_vocab']
         self.Build()
+        if args.mode in ['evaluate', 'test']:
+          self.load_state_dict(torch.load(self.model_save_dir, weights_only=False), strict=False)
         if 'cuda' in self.device:
             self.cuda()
 
