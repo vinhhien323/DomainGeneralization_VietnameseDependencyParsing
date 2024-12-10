@@ -28,6 +28,10 @@ if __name__ == "__main__":
     config.add_argument('--eval_use_folder', action='store_true')
     config.add_argument('--eval_require_preprocessing', action='store_false')
 
+    # Predict arguments
+    config.add_argument('--predict_dir', action='store', default='', type=str)
+    config.add_argument('--predict_require_preprocessing', action='store_false')
+
     # Embedding arguments
     config.add_argument('--embedding_type', action='store', default='roberta', type=str)
     config.add_argument('--embedding_name', action='store', default='', type=str)
@@ -84,13 +88,12 @@ if __name__ == "__main__":
         parser.Eval(dataset=eval_dataset, require_preprocessing=args.eval_require_preprocessing, logger=logger)
 
     if args.mode == 'predict':
-        eval_dataset = Dataset(directory=args.eval_dir, use_folder=args.eval_use_folder,
-                               use_domain=args.eval_use_domain)
-        predicted_heads, predicted_labels = parser.Eval(dataset=eval_dataset, require_preprocessing=args.eval_require_preprocessing,
+        predict_dataset = Dataset(directory=args.predict_dir)
+        predicted_heads, predicted_labels = parser.Eval(dataset=predict_dataset, require_preprocessing=args.predict_require_preprocessing,
                                                         logger=logger, mode=args.mode)
         inv_label_list = {parser.label_vocab[key]: key for key in parser.label_vocab.keys()}
         idx = 0
-        data = open(args.eval_dir, 'r', encoding='utf-8').readlines()
+        data = open(args.predict_dir, 'r', encoding='utf-8').readlines()
         predicted_data = []
         for line in data:
             split_line = line.split('\t')
@@ -101,8 +104,8 @@ if __name__ == "__main__":
                 split_line[7] = inv_label_list[predicted_labels[idx]]
                 idx += 1
                 data.append('\t'.join(split_line))
-        out_dir = args.save_dir + '/' + args.eval_dir.strip('/').strip('\\').split('/')[-1].split('\\')[-1] + '.predicted.conllu'
-        out_file = open(out_dir, 'w', encoding = 'utf-8')
+        out_dir = args.save_dir + '/' + args.predict_dir.strip('/').strip('\\').split('/')[-1].split('\\')[-1] + '.predict.conllu'
+        out_file = open(out_dir, 'w', encoding='utf-8')
         for line in predicted_data:
             out_file.write(line)
         out_file.close()
