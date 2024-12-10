@@ -100,8 +100,8 @@ if __name__ == "__main__":
             if len(split_line) != 10:
                 data.append(line)
             else:
-                split_line[6] = str(predicted_heads[idx])
-                split_line[7] = inv_label_list[predicted_labels[idx]]
+                split_line[6] = str(int(predicted_heads[idx]))
+                split_line[7] = inv_label_list[int(predicted_labels[idx])]
                 idx += 1
                 data.append('\t'.join(split_line))
         out_dir = args.save_dir + '/' + args.predict_dir.strip('/').strip('\\').split('/')[-1].split('\\')[-1] + '.predict.conllu'
