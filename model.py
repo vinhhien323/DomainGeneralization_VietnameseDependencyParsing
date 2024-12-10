@@ -82,7 +82,7 @@ class Dependency_Parsing(nn.Module):
             self.test_dataset = self.Data_Preprocess(
                 Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
                 init=False)
-        if args.mode in ['evaluate', 'test']:
+        if args.mode in ['evaluate', 'predict']:
             config = json.load(open(self.config_save_dir))
             self.pos_tag_vocab = config['pos_tag_vocab']
             self.label_vocab = config['label_vocab']
