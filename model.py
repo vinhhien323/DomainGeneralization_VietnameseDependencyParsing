@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModel, AutoConfig
 import numpy as np
 import datetime
 from collections import defaultdict, Counter
-import  json
+import json
 from utils import Get_subwords_mask_RoBERTa, Get_subwords_mask_BERT, Get_subwords_mask_PhoBERT
 from dataset import Dataset
 from gradient_reversal import GradientReversal
@@ -77,7 +77,8 @@ class Dependency_Parsing(nn.Module):
                 Dataset(directory=args.train_dir, use_folder=args.train_use_folder, use_domain=args.train_use_domain),
                 init=True)
             self.dev_dataset = self.Data_Preprocess(
-                Dataset(directory=args.dev_dir, use_folder=args.dev_use_folder, use_domain=args.dev_use_domain), init=False)
+                Dataset(directory=args.dev_dir, use_folder=args.dev_use_folder, use_domain=args.dev_use_domain),
+                init=False)
             self.test_dataset = self.Data_Preprocess(
                 Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
                 init=False)
@@ -88,7 +89,7 @@ class Dependency_Parsing(nn.Module):
             self.domain_vocab = config['domain_vocab']
         self.Build()
         if args.mode in ['evaluate', 'test']:
-          self.load_state_dict(torch.load(self.model_save_dir, weights_only=False), strict=False)
+            self.load_state_dict(torch.load(self.model_save_dir, weights_only=False), strict=False)
         if 'cuda' in self.device:
             self.cuda()
 
@@ -331,7 +332,8 @@ class Dependency_Parsing(nn.Module):
                 logger.info('New best record is saved.')
                 torch.save(self.state_dict(), self.model_save_dir)
         with open(self.config_save_dir, 'w') as out_file:
-            config_data = {'pos_tag_vocab': self.pos_tag_vocab, 'label_vocab': self.label_vocab, 'domain_vocab': self.domain_vocab}
+            config_data = {'pos_tag_vocab': self.pos_tag_vocab, 'label_vocab': self.label_vocab,
+                           'domain_vocab': self.domain_vocab}
             json.dump(config_data, out_file)
         logger.info(f'Best record on epoch {best_epoch}:')
         logger.info(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
