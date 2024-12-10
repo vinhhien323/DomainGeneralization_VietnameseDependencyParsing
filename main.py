@@ -52,7 +52,7 @@ if __name__ == "__main__":
     config.add_argument('--device', action='store', default='cpu', type=str)
 
     # Train arguments
-    config.add_argument('--mode', choices=['train', 'evaluate', 'test'], required=True, help='Model mode')
+    config.add_argument('--mode', choices=['train', 'evaluate', 'predict'], required=True, help='Model mode')
     config.add_argument('--model_name', action='store', required=True, type=str)
     config.add_argument('--save_dir', action='store', default='./', type=str)
 
@@ -82,3 +82,28 @@ if __name__ == "__main__":
         eval_dataset = Dataset(directory=args.eval_dir, use_folder=args.eval_use_folder,
                                use_domain=args.eval_use_domain)
         parser.Eval(dataset=eval_dataset, require_preprocessing=args.eval_require_preprocessing, logger=logger)
+
+    if args.mode == 'predict':
+        eval_dataset = Dataset(directory=args.eval_dir, use_folder=args.eval_use_folder,
+                               use_domain=args.eval_use_domain)
+        predicted_heads, predicted_labels = parser.Eval(dataset=eval_dataset, require_preprocessing=args.eval_require_preprocessing,
+                                                        logger=logger, mode=args.mode)
+        inv_label_list = {parser.label_vocab[key]: key for key in parser.label_vocab.keys()}
+        idx = 0
+        data = open(args.eval_dir, 'r', encoding='utf-8').readlines()
+        predicted_data = []
+        for line in data:
+            split_line = line.split('\t')
+            if len(split_line) != 10:
+                data.append(line)
+            else:
+                split_line[6] = str(predicted_heads[idx])
+                split_line[7] = inv_label_list[predicted_labels[idx]]
+                idx += 1
+                data.append('\t'.join(split_line))
+        out_dir = args.save_dir + '/' + args.eval_dir.strip('/').strip('\\').split('/')[-1].split('\\')[-1] + '.predicted.conllu'
+        out_file = open(out_dir, 'w', encoding = 'utf-8')
+        for line in predicted_data:
+            out_file.write(line)
+        out_file.close()
+        logger.info(f'Predicted file is saved to {out_dir}.')

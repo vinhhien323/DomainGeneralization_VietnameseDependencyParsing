@@ -339,7 +339,7 @@ class Dependency_Parsing(nn.Module):
         logger.info(f'Dev  set:\tUAS: {round(best_dev_uas, 2)}\tLAS: {round(best_dev_las, 2)}')
         logger.info(f'Test set:\tUAS: {round(best_test_uas, 2)}\tLAS: {round(best_test_las, 2)}')
 
-    def Eval(self, dataset, require_preprocessing=False, logger=None):
+    def Eval(self, dataset, require_preprocessing=False, logger=None, mode='evaluate'):
         self.eval()
         if require_preprocessing:
             eval_data = self.Data_Preprocess(dataset, init=False)
@@ -350,6 +350,8 @@ class Dependency_Parsing(nn.Module):
             logger.info('Starting evaluation process:')
             logger.info(f'Number of batches: {n_batches}')
         records = defaultdict(int)
+        predicted_heads_list = []
+        predicted_labels_list = []
         for batch in range(0, len(eval_data), self.batch_size):
             start_time = datetime.datetime.now()
             data = eval_data[batch:min(batch + self.batch_size, len(eval_data))]
@@ -357,9 +359,14 @@ class Dependency_Parsing(nn.Module):
             records['words'] += n_words
             records['correct_heads'] += n_correct_heads
             records['correct_labels'] += n_correct_labels
+            predicted_heads_list += predicted_heads
+            predicted_labels_list += predicted_labels
         uas = records['correct_heads'] / records['words'] * 100
         las = records['correct_labels'] / records['words'] * 100
         if logger is not None:
             logger.info(f'UAS: {round(uas, 2)}')
             logger.info(f'LAS: {round(las, 2)}')
-        return uas, las
+        if mode == 'evaluate':
+            return uas, las
+        if mode == 'predict':
+            return predicted_heads_list, predicted_labels_list
