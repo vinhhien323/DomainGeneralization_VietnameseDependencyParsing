@@ -292,12 +292,12 @@ class Dependency_Parsing(nn.Module):
             predicted_labels = unmasked_label_scores.argmax(-1)
 
             # Counting correct heads & labels
-            correct_heads = int((predicted_heads == unmasked_head_paddings).sum())
-            correct_labels = int(
+            n_correct_heads = int((predicted_heads == unmasked_head_paddings).sum())
+            n_correct_labels = int(
                 ((predicted_labels == unmasked_label_paddings) & (predicted_heads == unmasked_head_paddings)).sum())
 
             n_words = int(mask_paddings.sum())
-            return (n_words, correct_heads, correct_labels)
+            return n_words, n_correct_heads, n_correct_labels, predicted_heads, predicted_labels
 
     def Train(self, n_epochs, logger):
         # If save_dir is None, model will not be saved.
@@ -353,10 +353,10 @@ class Dependency_Parsing(nn.Module):
         for batch in range(0, len(eval_data), self.batch_size):
             start_time = datetime.datetime.now()
             data = eval_data[batch:min(batch + self.batch_size, len(eval_data))]
-            n_words, correct_heads, correct_labels = self.evaluate(data)
+            n_words, n_correct_heads, n_correct_labels, predicted_heads, predicted_labels = self.evaluate(data)
             records['words'] += n_words
-            records['correct_heads'] += correct_heads
-            records['correct_labels'] += correct_labels
+            records['correct_heads'] += n_correct_heads
+            records['correct_labels'] += n_correct_labels
         uas = records['correct_heads'] / records['words'] * 100
         las = records['correct_labels'] / records['words'] * 100
         if logger is not None:
