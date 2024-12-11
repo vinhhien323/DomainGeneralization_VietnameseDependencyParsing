@@ -66,7 +66,7 @@ if __name__ == "__main__":
         logging.root.removeHandler(handler)
     logger = logging.getLogger('')
     logging.basicConfig(level=logging.INFO, format='%(message)s',
-                        handlers=[logging.FileHandler(args.model_name + '.log'), logging.StreamHandler()])
+                        handlers=[logging.FileHandler(f'{args.model_name}.{args.mode}.log'), logging.StreamHandler()])
     args_list = [f'{i}: {j}' for i, j in vars(args).items()]
     logger.info('Model arguments:')
     for arg in args_list:
