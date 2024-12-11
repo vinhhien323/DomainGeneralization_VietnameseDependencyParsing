@@ -88,7 +88,7 @@ class Dependency_Parsing(nn.Module):
             self.label_vocab = config['label_vocab']
             self.domain_vocab = config['domain_vocab']
         self.Build()
-        if args.mode in ['evaluate', 'test']:
+        if args.mode in ['evaluate', 'predict']:
             self.load_state_dict(torch.load(self.model_save_dir, weights_only=False), strict=False)
         if 'cuda' in self.device:
             self.cuda()
