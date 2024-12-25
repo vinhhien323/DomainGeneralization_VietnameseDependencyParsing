@@ -51,6 +51,7 @@ class Dependency_Parsing(nn.Module):
         self.use_grl = args.use_grl
         self.grl_theta = args.grl_theta
         self.grl_loss_rate = args.grl_loss_rate
+        self.grl_drop_out = args.grl_drop_out
         self.eval_with_grl = args.eval_with_grl
 
         if args.embedding_type == 'roberta':
@@ -144,7 +145,7 @@ class Dependency_Parsing(nn.Module):
             """
             self.GRL = nn.Sequential(GradientReversal(alpha=self.grl_theta),
                                      nn.Linear(self.encoder_config.hidden_size, len(self.domain_vocab)),
-                                     nn.ReLU())
+                                     nn.Dropout(self.grl_drop_out), nn.ReLU())
         # Biaffine layer
         self.biaffine_arc = Biaffine(n_in=self.arc_mlp, n_out=1, bias_x=True, bias_y=False)
         self.biaffine_label = Biaffine(n_in=self.label_mlp, n_out=len(self.label_vocab), bias_x=True, bias_y=True)
@@ -222,7 +223,7 @@ class Dependency_Parsing(nn.Module):
 
         if self.use_grl:
             grl_loss = self.loss_fn(unmasked_domain_scores, unmasked_domain_paddings)
-            loss = loss + self.grl_loss_rate * grl_loss
+            loss = (1.0-self.grl_loss_rate)*loss + self.grl_loss_rate * grl_loss
 
         # Get predicted heads & labels
         predicted_heads = unmasked_arc_scores.argmax(1)

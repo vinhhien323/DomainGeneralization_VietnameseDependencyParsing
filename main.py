@@ -50,6 +50,7 @@ if __name__ == "__main__":
     config.add_argument('--use_grl', action='store_true')
     config.add_argument('--grl_theta', action='store', default=1e-5, type=float)
     config.add_argument('--grl_loss_rate', action='store', default=0.001, type=float)
+    config.add_argument('--grl_drop_out', action='store', default=0.3, type=float)
     config.add_argument('--eval_with_grl', action='store_true')
 
     # Device arguments
