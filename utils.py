@@ -27,7 +27,7 @@ def Get_subwords_mask_RoBERTa(sentence, subword_list):
     pos = 0
     word = ''
     for subword in subword_list:
-        subword = subword.replace('Ġ', '')
+        subword = subword.replace('Ġ', '').replace('▁', '')
         word += subword
         if word == sentence[pos]:
             padding.append(True)
