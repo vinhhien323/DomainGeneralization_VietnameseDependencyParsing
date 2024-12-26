@@ -172,9 +172,9 @@ class Dependency_Parsing(nn.Module):
         from torch.nn.functional import pad
         # Padding
         word_paddings = torch.stack([pad(torch.tensor(word), (0, max_word_len - len(word)), value=0) for word in words])
-        head_paddings = torch.stack([pad(torch.tensor(head), (0, max_word_len - len(head)), value=0) for head in heads])
+        head_paddings = torch.stack([pad(torch.tensor([0] + head), (0, max_word_len - len(head) - 1), value=0) for head in heads])
         label_paddings = torch.stack(
-            [pad(torch.tensor(label), (0, max_word_len - len(label)), value=0) for label in labels])
+            [pad(torch.tensor([0] + label), (0, max_word_len - len(label) - 1), value=0) for label in labels])
         mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
         attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
         if self.use_grl:
@@ -257,9 +257,9 @@ class Dependency_Parsing(nn.Module):
             word_paddings = torch.stack(
                 [pad(torch.tensor(word), (0, max_word_len - len(word)), value=0) for word in words])
             head_paddings = torch.stack(
-                [pad(torch.tensor(head), (0, max_word_len - len(head)), value=0) for head in heads])
+                [pad(torch.tensor([0] + head), (0, max_word_len - len(head) - 1), value=0) for head in heads])
             label_paddings = torch.stack(
-                [pad(torch.tensor(label), (0, max_word_len - len(label)), value=0) for label in labels])
+                [pad(torch.tensor([0] + label), (0, max_word_len - len(label) - 1), value=0) for label in labels])
             mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
             attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
 
