@@ -156,6 +156,11 @@ class Dependency_Parsing(nn.Module):
         self.optimizer = torch.optim.AdamW(
             params=[{'params': p, 'lr': self.learning_rate * (1 if n.startswith('encoder') else self.lr_rate)}
                     for n, p in self.named_parameters()], betas=(0.9, 0.999), lr=self.learning_rate, weight_decay=0)
+        self.scheduler = transformers.get_linear_schedule_with_warmup(
+            optimizer=self.optimizer,
+            num_warmup_steps=10**2,
+            num_training_steps=10**5
+        )
 
     def forward(self, data):
         # Split data
@@ -327,6 +332,7 @@ class Dependency_Parsing(nn.Module):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+                self.scheduler.step()
             avg_loss = stats['train_loss'] / n_batches
             logger.info(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
             dev_uas, dev_las = self.Eval(self.dev_dataset)
