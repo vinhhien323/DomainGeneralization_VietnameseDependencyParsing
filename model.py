@@ -1,6 +1,6 @@
 from torch import nn
 import torch
-from transformers import AutoTokenizer, AutoModel, AutoConfig
+from transformers import AutoTokenizer, AutoModel, AutoConfig, get_scheduler
 import transformers
 import numpy as np
 import datetime
@@ -85,7 +85,7 @@ class Dependency_Parsing(nn.Module):
                 Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
                 init=False)
             self.num_training_steps = args.n_epochs * (
-                        (len(self.train_dataset) + self.batch_size - 1) // self.batch_size)
+                    (len(self.train_dataset) + self.batch_size - 1) // self.batch_size)
         if args.mode in ['evaluate', 'predict']:
             config = json.load(open(self.config_save_dir))
             self.pos_tag_vocab = config['pos_tag_vocab']
@@ -160,6 +160,7 @@ class Dependency_Parsing(nn.Module):
         self.optimizer = torch.optim.AdamW(
             params=[{'params': p, 'lr': self.learning_rate * (1 if n.startswith('encoder') else self.lr_rate)}
                     for n, p in self.named_parameters()], betas=(0.9, 0.999), lr=self.learning_rate, weight_decay=0)
+        '''
         self.scheduler = transformers.get_polynomial_decay_schedule_with_warmup(
             optimizer=self.optimizer,
             num_warmup_steps=int(self.num_training_steps * self.warm_up_rate),
@@ -167,6 +168,9 @@ class Dependency_Parsing(nn.Module):
             lr_end=self.learning_rate/10,
             power=0.7,
             last_epoch=-1)
+        '''
+        self.scheduler = get_scheduler(name="linear", optimizer=self.optimizer, num_warmup_steps=int(self.num_training_steps * self.warm_up_rate),
+                                       num_training_steps=self.num_training_steps)
 
     def forward(self, data):
         # Split data
