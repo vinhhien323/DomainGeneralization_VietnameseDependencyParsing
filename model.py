@@ -346,7 +346,7 @@ class Dependency_Parsing(nn.Module):
                 self.scheduler.step()
             avg_loss = stats['train_loss'] / n_batches
             logger.info(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
-            logger.info(f'lr: {self.scheduler.get_lr()}')
+            logger.info(f'lr: {self.scheduler.get_last_lr()}')
             dev_uas, dev_las = self.Eval(self.dev_dataset)
             test_uas, test_las = self.Eval(self.test_dataset)
             logger.info(f'Dev  set:\tUAS: {round(dev_uas, 2)}\tLAS: {round(dev_las, 2)}')
