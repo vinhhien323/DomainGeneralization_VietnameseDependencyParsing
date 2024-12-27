@@ -73,7 +73,7 @@ class Dependency_Parsing(nn.Module):
         self.device = args.device
         self.model_save_dir = f'{args.save_dir}/{args.model_name}.bin'
         self.config_save_dir = f'{args.save_dir}/{args.model_name}.config.json'
-
+        self.warm_up_rate = args.warm_up_rate
         if args.mode == 'train':
             self.train_dataset = self.Data_Preprocess(
                 Dataset(directory=args.train_dir, use_folder=args.train_use_folder, use_domain=args.train_use_domain),
@@ -84,11 +84,14 @@ class Dependency_Parsing(nn.Module):
             self.test_dataset = self.Data_Preprocess(
                 Dataset(directory=args.test_dir, use_folder=args.test_use_folder, use_domain=args.test_use_domain),
                 init=False)
+            self.num_training_steps = args.n_epochs * (
+                        (len(self.train_dataset) + self.batch_size - 1) // self.batch_size)
         if args.mode in ['evaluate', 'predict']:
             config = json.load(open(self.config_save_dir))
             self.pos_tag_vocab = config['pos_tag_vocab']
             self.label_vocab = config['label_vocab']
             self.domain_vocab = config['domain_vocab']
+            self.num_training_steps = 10 ** 9
         self.Build()
         if args.mode in ['evaluate', 'predict']:
             self.load_state_dict(torch.load(self.model_save_dir, weights_only=False), strict=False)
@@ -157,11 +160,13 @@ class Dependency_Parsing(nn.Module):
         self.optimizer = torch.optim.AdamW(
             params=[{'params': p, 'lr': self.learning_rate * (1 if n.startswith('encoder') else self.lr_rate)}
                     for n, p in self.named_parameters()], betas=(0.9, 0.999), lr=self.learning_rate, weight_decay=0)
-        self.scheduler = transformers.get_linear_schedule_with_warmup(
+        self.scheduler = transformers.get_polynomial_decay_schedule_with_warmup(
             optimizer=self.optimizer,
-            num_warmup_steps=10**2,
-            num_training_steps=10**5
-        )
+            num_warmup_steps=int(self.num_training_steps * self.warm_up_rate),
+            num_training_steps=self.num_training_steps,
+            lr_end=self.learning_rate/10,
+            power=0.7,
+            last_epoch=-1)
 
     def forward(self, data):
         # Split data
@@ -178,11 +183,13 @@ class Dependency_Parsing(nn.Module):
         from torch.nn.functional import pad
         # Padding
         word_paddings = torch.stack([pad(torch.tensor(word), (0, max_word_len - len(word)), value=0) for word in words])
-        head_paddings = torch.stack([pad(torch.tensor([0] + head), (0, max_word_len - len(head) - 1), value=0) for head in heads])
+        head_paddings = torch.stack(
+            [pad(torch.tensor([0] + head), (0, max_word_len - len(head) - 1), value=0) for head in heads])
         label_paddings = torch.stack(
             [pad(torch.tensor([0] + label), (0, max_word_len - len(label) - 1), value=0) for label in labels])
         word_mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
-        head_label_mask_paddings = [[False] + [True] * len(head) + [False] * (max_word_len - len(head) - 1) for head in heads]
+        head_label_mask_paddings = [[False] + [True] * len(head) + [False] * (max_word_len - len(head) - 1) for head in
+                                    heads]
         attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
         if self.use_grl:
             domain_paddings = torch.tensor([[domain] * max_word_len for domain in domains])
@@ -222,7 +229,6 @@ class Dependency_Parsing(nn.Module):
         unmasked_label_scores = unmasked_label_scores[
             [torch.arange(len(unmasked_head_paddings)), unmasked_head_paddings]]
 
-
         if self.use_grl:
             unmasked_domain_scores = torch.flatten(domain_scores, 0, 1)[word_mask_paddings]
             unmasked_domain_paddings = torch.flatten(domain_paddings, 0, 1)[word_mask_paddings]
@@ -234,7 +240,7 @@ class Dependency_Parsing(nn.Module):
 
         if self.use_grl:
             grl_loss = self.loss_fn(unmasked_domain_scores, unmasked_domain_paddings)
-            loss = (1.0-self.grl_loss_rate)*loss + self.grl_loss_rate * grl_loss
+            loss = (1.0 - self.grl_loss_rate) * loss + self.grl_loss_rate * grl_loss
 
         # Get predicted heads & labels
         predicted_heads = unmasked_arc_scores.argmax(1)

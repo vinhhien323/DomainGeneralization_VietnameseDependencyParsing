@@ -44,6 +44,7 @@ if __name__ == "__main__":
     config.add_argument('--batch_size', action='store', default=32, type=int)
     config.add_argument('--learning_rate', action='store', default=5e-5, type=float)
     config.add_argument('--lr_rate', action='store', default=10, type=float)
+    config.add_argument('--warm_up_rate', action='store', default=0.1, type=float)
     config.add_argument('--n_epochs', action='store', default=5, type=int)
 
     # GRL parameters
