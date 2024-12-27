@@ -1,6 +1,7 @@
 from torch import nn
 import torch
 from transformers import AutoTokenizer, AutoModel, AutoConfig
+import transformers
 import numpy as np
 import datetime
 from collections import defaultdict, Counter
