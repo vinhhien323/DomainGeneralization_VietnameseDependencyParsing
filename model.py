@@ -11,6 +11,7 @@ from dataset import Dataset
 from gradient_reversal import GradientReversal
 from optim import LinearLR
 
+
 class Biaffine(nn.Module):
     def __init__(self, n_in, n_out=1, bias_x=True, bias_y=True, scale=0):
         super().__init__()
@@ -172,9 +173,8 @@ class Dependency_Parsing(nn.Module):
                                        num_training_steps=self.num_training_steps)
         '''
         self.scheduler = LinearLR(optimizer=self.optimizer,
-                                 warmup_steps=int(self.num_training_steps * self.warm_up_rate),
-                                 steps=self.num_training_steps)
-
+                                  warmup_steps=int(self.num_training_steps * self.warm_up_rate),
+                                  steps=self.num_training_steps)
 
     def forward(self, data):
         # Split data
@@ -350,7 +350,8 @@ class Dependency_Parsing(nn.Module):
                 self.scheduler.step()
             avg_loss = stats['train_loss'] / n_batches
             logger.info(f'Epoch {epoch_id + 1}: {avg_loss}, {datetime.datetime.now() - start_time} seconds.')
-            logger.info(f'lr: {self.scheduler.get_last_lr()}')
+            current_lr = sum(self.scheduler.get_last_lr()) / len(self.scheduler.get_last_lr())
+            logger.info(f'lr: {current_lr}')
             dev_uas, dev_las = self.Eval(self.dev_dataset)
             test_uas, test_las = self.Eval(self.test_dataset)
             logger.info(f'Dev  set:\tUAS: {round(dev_uas, 2)}\tLAS: {round(dev_las, 2)}')

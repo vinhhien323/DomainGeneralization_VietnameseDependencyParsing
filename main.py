@@ -91,7 +91,8 @@ if __name__ == "__main__":
 
     if args.mode == 'predict':
         predict_dataset = Dataset(directory=args.predict_dir)
-        predicted_heads, predicted_labels = parser.Eval(dataset=predict_dataset, require_preprocessing=args.predict_require_preprocessing,
+        predicted_heads, predicted_labels = parser.Eval(dataset=predict_dataset,
+                                                        require_preprocessing=args.predict_require_preprocessing,
                                                         logger=logger, mode=args.mode)
         inv_label_list = {parser.label_vocab[key]: key for key in parser.label_vocab.keys()}
         idx = 0
@@ -106,7 +107,8 @@ if __name__ == "__main__":
                 split_line[7] = inv_label_list[int(predicted_labels[idx])]
                 idx += 1
                 predicted_data.append('\t'.join(split_line))
-        out_dir = args.save_dir + '/' + args.predict_dir.strip('/').strip('\\').split('/')[-1].split('\\')[-1] + '.predict.conllu'
+        out_dir = args.save_dir + '/' + args.predict_dir.strip('/').strip('\\').split('/')[-1].split('\\')[
+            -1] + '.predict.conllu'
         out_file = open(out_dir, 'w', encoding='utf-8')
         for line in predicted_data:
             out_file.write(line)
