@@ -9,7 +9,7 @@ import json
 from utils import Get_subwords_mask_RoBERTa, Get_subwords_mask_BERT, Get_subwords_mask_PhoBERT
 from dataset import Dataset
 from gradient_reversal import GradientReversal
-
+from optim import LinearLR
 
 class Biaffine(nn.Module):
     def __init__(self, n_in, n_out=1, bias_x=True, bias_y=True, scale=0):
@@ -168,9 +168,13 @@ class Dependency_Parsing(nn.Module):
             lr_end=self.learning_rate/10,
             power=0.7,
             last_epoch=-1)
-        '''
         self.scheduler = get_scheduler(name="linear", optimizer=self.optimizer, num_warmup_steps=int(self.num_training_steps * self.warm_up_rate),
                                        num_training_steps=self.num_training_steps)
+        '''
+        self.scheduler = LinearLR(optimizer=self.optimizer,
+                                 warmup_steps=int(self.num_training_steps * self.warm_up_rate),
+                                 steps=self.num_training_steps)
+
 
     def forward(self, data):
         # Split data
