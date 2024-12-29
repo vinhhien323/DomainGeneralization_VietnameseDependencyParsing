@@ -54,6 +54,7 @@ class Dataset:
     def Create_pos_tag_vocab(self, data):
         pos_tag_list = set(tag for sentence in data for tag in sentence['pos_tags'])
         # Add feature to handle dataset without pos-tags
+        pos_tag_list.add('_')
         pos_tag_list = sorted(pos_tag_list)
         pos_tag_vocab = defaultdict(lambda: 0)
         for id, tag in enumerate(pos_tag_list):

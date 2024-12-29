@@ -1,16 +1,17 @@
 from torch import nn
 import torch
-from transformers import AutoTokenizer, AutoModel, AutoConfig, get_scheduler
+from transformers import AutoTokenizer, AutoModel, AutoConfig, get_scheduler, RobertaTokenizerFast
 import transformers
 import numpy as np
 import datetime
 from collections import defaultdict, Counter
 import json
+import copy
 from utils import Get_subwords_mask_RoBERTa, Get_subwords_mask_BERT, Get_subwords_mask_PhoBERT
 from dataset import Dataset
 from gradient_reversal import GradientReversal
 from optim import LinearLR
-
+from pretrained import TransformerEmbedding
 
 class Biaffine(nn.Module):
     def __init__(self, n_in, n_out=1, bias_x=True, bias_y=True, scale=0):
@@ -107,19 +108,21 @@ class Dependency_Parsing(nn.Module):
             self.use_domain = dataset.use_domain
         data = []
         for sentence in dataset.data:
-            tokenized_words = self.tokenizer.tokenize(' '.join(sentence['words']))
-            if len(tokenized_words) + 2 > self.embedding_max_len:
-                continue
-            origin_masks = self.get_mask(sentence['words'], tokenized_words)
-            if self.embedding_type in ['bert', 'roberta']:
-                origin_masks = [False] + origin_masks + [False]
-            encoded_words = self.tokenizer(' '.join(sentence['words']))['input_ids']
+            original_sentence = ' '.join(sentence['words'])
+            tokens = self.tokenizer(original_sentence)['input_ids'][1:-1]
+            mask = self.get_mask(sentence['words'],self.tokenizer.tokenize(original_sentence))
+            encoded_words = [[0]]
+            current_word = []
+            for i in range(len(tokens)):
+                current_word.append(tokens[i])
+                if mask[i] == True:
+                    encoded_words.append(current_word)
+                    current_word = []
             encoded_heads = sentence['heads']
             encoded_labels = [self.label_vocab[label] for label in sentence['labels']]
             encoded_pos_tags = [self.pos_tag_vocab[pos_tag] for pos_tag in sentence['pos_tags']]
             new_sen = dict(
-                {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'pos_tags': encoded_pos_tags,
-                 'mask': origin_masks})
+                {'words': encoded_words, 'heads': encoded_heads, 'labels': encoded_labels, 'pos_tags': encoded_pos_tags})
             if dataset.use_domain:
                 new_sen['domain'] = dataset.domain_vocab[sentence['domain']]
             data.append(new_sen)
@@ -128,7 +131,8 @@ class Dependency_Parsing(nn.Module):
     def Build(self):
         # Encoder layer
         if self.embedding_type in ['bert', 'roberta', 'mamba']:
-            self.encoder = AutoModel.from_pretrained(self.embedding_name)
+            #self.encoder = AutoModel.from_pretrained(self.embedding_name)
+            self.encoder = TransformerEmbedding(name = self.embedding_name, n_layers = 4, pad_index = 1, finetune = True)
         # MLP layer
         self.head_mlp_arc = nn.Sequential(nn.Linear(self.encoder_config.hidden_size, self.arc_mlp),
                                           nn.Dropout(self.drop_out), nn.ReLU())
@@ -176,41 +180,52 @@ class Dependency_Parsing(nn.Module):
                                   warmup_steps=int(self.num_training_steps * self.warm_up_rate),
                                   steps=self.num_training_steps)
 
-    def forward(self, data):
+    def forward(self, raw_data, require = False):
         # Split data
+        data = copy.deepcopy(raw_data)
         words = [sentence['words'] for sentence in data]
         heads = [sentence['heads'] for sentence in data]
         labels = [sentence['labels'] for sentence in data]
-        masks = [sentence['mask'] for sentence in data]
         if self.use_grl:
             domains = [sentence['domain'] for sentence in data]
-
         # Get length after padding
         n_sentences = len(data)
         max_word_len = max([len(sentence) for sentence in words])
+        max_subword_len  = 0
+        for word in words:
+            for subword in word:
+                max_subword_len = max(max_subword_len, len(subword))
         from torch.nn.functional import pad
         # Padding
-        word_paddings = torch.stack([pad(torch.tensor(word), (0, max_word_len - len(word)), value=0) for word in words])
-        head_paddings = torch.stack(
-            [pad(torch.tensor([0] + head), (0, max_word_len - len(head) - 1), value=0) for head in heads])
-        label_paddings = torch.stack(
-            [pad(torch.tensor([0] + label), (0, max_word_len - len(label) - 1), value=0) for label in labels])
-        word_mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
-        head_label_mask_paddings = [[False] + [True] * len(head) + [False] * (max_word_len - len(head) - 1) for head in
-                                    heads]
-        attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
+        word_mask_paddings = []
+        for i in range(len(words)):
+            word_mask_paddings.append([False] + [True] * (len(words[i])-1) + [False] * (max_word_len - len(words[i])))
+            if len(words[i]) < max_word_len:
+                words[i] += [[1]] * (max_word_len - len(words[i]))
+            for j in range(max_word_len):
+                if len(words[i][j]) < max_subword_len:
+                    words[i][j] += [1] * (max_subword_len - len(words[i][j]))
+        word_paddings = torch.tensor(words).to(self.device)
+        head_list = []
+        for head in heads:
+            head_list += head
+        label_list = []
+        for label in labels:
+            label_list += label
         if self.use_grl:
-            domain_paddings = torch.tensor([[domain] * max_word_len for domain in domains])
+            domain_paddings = torch.tensor([[domain] * max_word_len for domain in domains]).to(self.device)
 
         # Getting contexual embedding
         if self.embedding_type in ['bert', 'roberta', 'mamba']:
+            embedding_output = self.encoder(word_paddings)
+            '''
             embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
             new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                            torch.zeros(max_word_len - len(embedding[padding]),
                                                                        self.encoder_config.hidden_size))) for
                                                 embedding, padding in zip(embedding_output, word_mask_paddings)])
             embedding_output = new_embedding_output
-
+            '''
         # Send the embedding into MLPs
         arc_head = self.head_mlp_arc(embedding_output)
         arc_dep = self.dep_mlp_arc(embedding_output)
@@ -226,24 +241,25 @@ class Dependency_Parsing(nn.Module):
             domain_scores = self.GRL(embedding_output)
 
         # Unmask
-        word_mask_paddings = torch.flatten(torch.tensor(word_mask_paddings))
-        unmasked_arc_scores = torch.flatten(arc_scores, 0, 1)[word_mask_paddings]
-        unmasked_label_scores = torch.flatten(label_scores, 0, 1)[word_mask_paddings]
+        word_mask_paddings = torch.flatten(torch.tensor(word_mask_paddings).to(self.device))
+        unmasked_arc_scores = torch.flatten(arc_scores, 0, 1)
+        unmasked_label_scores = torch.flatten(label_scores, 0, 1)
 
-        head_label_mask_paddings = torch.flatten(torch.tensor(head_label_mask_paddings))
-        unmasked_head_paddings = torch.flatten(head_paddings, 0, 1)[head_label_mask_paddings]
-        unmasked_label_paddings = torch.flatten(label_paddings, 0, 1)[head_label_mask_paddings]
+        unmasked_arc_scores = unmasked_arc_scores[word_mask_paddings]
+        unmasked_label_scores = unmasked_label_scores[word_mask_paddings]
+        head_list = torch.tensor(head_list).to(self.device)
+        label_list = torch.tensor(label_list).to(self.device)
 
         unmasked_label_scores = unmasked_label_scores[
-            [torch.arange(len(unmasked_head_paddings)), unmasked_head_paddings]]
+            [torch.arange(len(head_list)), head_list]]
 
         if self.use_grl:
             unmasked_domain_scores = torch.flatten(domain_scores, 0, 1)[word_mask_paddings]
             unmasked_domain_paddings = torch.flatten(domain_paddings, 0, 1)[word_mask_paddings]
         # Calculate loss
-
-        arc_loss = self.loss_fn(unmasked_arc_scores, unmasked_head_paddings)
-        label_loss = self.loss_fn(unmasked_label_scores, unmasked_label_paddings)
+        
+        arc_loss = self.loss_fn(unmasked_arc_scores, head_list)
+        label_loss = self.loss_fn(unmasked_label_scores, label_list)
         loss = arc_loss + label_loss
 
         if self.use_grl:
@@ -251,54 +267,63 @@ class Dependency_Parsing(nn.Module):
             loss = (1.0 - self.grl_loss_rate) * loss + self.grl_loss_rate * grl_loss
 
         # Get predicted heads & labels
-        predicted_heads = unmasked_arc_scores.argmax(1)
-        predicted_labels = unmasked_label_scores.argmax(1)
+        predicted_heads = unmasked_arc_scores.argmax(-1)
+        predicted_labels = unmasked_label_scores.argmax(-1)
 
         # Counting correct heads & labels
-        correct_heads = int((predicted_heads == unmasked_head_paddings).sum())
-        correct_labels = int((predicted_labels == unmasked_label_paddings).sum())
+        correct_heads = int((predicted_heads == head_list).sum())
+        correct_labels = int((predicted_labels == label_list).sum())
         n_words = word_mask_paddings.sum()
-        # print('uas:', correct_heads/n_words*100)
-        # print('las:', correct_labels/n_words*100)
 
         return loss
 
-    def evaluate(self, data):
+    def evaluate(self, raw_data):
         # Turn off gradient
         with torch.no_grad():
-            # Split data
+            data = copy.deepcopy(raw_data)
             words = [sentence['words'] for sentence in data]
             heads = [sentence['heads'] for sentence in data]
             labels = [sentence['labels'] for sentence in data]
-            masks = [sentence['mask'] for sentence in data]
-            if self.eval_with_grl:
+            if self.use_grl:
                 domains = [sentence['domain'] for sentence in data]
-
             # Get length after padding
             n_sentences = len(data)
             max_word_len = max([len(sentence) for sentence in words])
+            max_subword_len  = 0
+            for word in words:
+                for subword in word:
+                    max_subword_len = max(max_subword_len, len(subword))
             from torch.nn.functional import pad
             # Padding
-            word_paddings = torch.stack(
-                [pad(torch.tensor(word), (0, max_word_len - len(word)), value=0) for word in words])
-            head_paddings = torch.stack(
-                [pad(torch.tensor([0] + head), (0, max_word_len - len(head) - 1), value=0) for head in heads])
-            label_paddings = torch.stack(
-                [pad(torch.tensor([0] + label), (0, max_word_len - len(label) - 1), value=0) for label in labels])
-            word_mask_paddings = [mask + [False] * (max_word_len - len(mask)) for mask in masks]
-            head_label_mask_paddings = [[False] + [True] * len(head) + [False] * (max_word_len - len(head) - 1) for head
-                                        in heads]
-            attention_mask = torch.tensor([[1] * len(word) + [0] * (max_word_len - len(word)) for word in words])
-
+            word_mask_paddings = []
+            for i in range(len(words)):
+                word_mask_paddings.append([False] + [True] * (len(words[i])-1) + [False] * (max_word_len - len(words[i])))
+                if len(words[i]) < max_word_len:
+                    words[i] += [[1]] * (max_word_len - len(words[i]))
+                for j in range(max_word_len):
+                    if len(words[i][j]) < max_subword_len:
+                        words[i][j] += [1] * (max_subword_len - len(words[i][j]))
+            word_paddings = torch.tensor(words)
+            head_list = []
+            for head in heads:
+                head_list += head
+            label_list = []
+            for label in labels:
+                label_list += label
+            if self.use_grl:
+                domain_paddings = torch.tensor([[domain] * max_word_len for domain in domains])
+    
             # Getting contexual embedding
             if self.embedding_type in ['bert', 'roberta', 'mamba']:
+                embedding_output = self.encoder(word_paddings)
+                '''
                 embedding_output = self.encoder(word_paddings, attention_mask=attention_mask).last_hidden_state
                 new_embedding_output = torch.stack([torch.cat((embedding[padding],
                                                                torch.zeros(max_word_len - len(embedding[padding]),
                                                                            self.encoder_config.hidden_size))) for
                                                     embedding, padding in zip(embedding_output, word_mask_paddings)])
                 embedding_output = new_embedding_output
-
+                '''
             # Send the embedding into MLPs
             arc_head = self.head_mlp_arc(embedding_output)
             arc_dep = self.dep_mlp_arc(embedding_output)
@@ -308,26 +333,31 @@ class Dependency_Parsing(nn.Module):
             arc_scores = self.biaffine_arc(arc_dep, arc_head)
             label_scores = self.biaffine_label(label_dep, label_head).permute(0, 2, 3, 1)
             # Unmask
-            word_mask_paddings = torch.flatten(torch.tensor(word_mask_paddings))
+            word_mask_paddings = torch.flatten(torch.tensor(word_mask_paddings).to(self.device))
             unmasked_arc_scores = torch.flatten(arc_scores, 0, 1)[word_mask_paddings]
             unmasked_label_scores = torch.flatten(label_scores, 0, 1)[word_mask_paddings]
-
-            head_label_mask_paddings = torch.flatten(torch.tensor(head_label_mask_paddings))
-            unmasked_head_paddings = torch.flatten(head_paddings, 0, 1)[head_label_mask_paddings]
-            unmasked_label_paddings = torch.flatten(label_paddings, 0, 1)[head_label_mask_paddings]
-
+    
+            head_list = torch.tensor(head_list).to(self.device)
+            label_list = torch.tensor(label_list).to(self.device)
+    
+            unmasked_label_scores = unmasked_label_scores[
+                [torch.arange(len(head_list)), head_list]]
+    
+            if self.use_grl:
+                unmasked_domain_scores = torch.flatten(domain_scores, 0, 1)[word_mask_paddings]
+                unmasked_domain_paddings = torch.flatten(domain_paddings, 0, 1)[word_mask_paddings]
+    
             # Get predicted heads & labels
             predicted_heads = unmasked_arc_scores.argmax(-1)
-            unmasked_label_scores = unmasked_label_scores[[torch.arange(len(predicted_heads)), predicted_heads]]
             predicted_labels = unmasked_label_scores.argmax(-1)
-
+    
             # Counting correct heads & labels
-            n_correct_heads = int((predicted_heads == unmasked_head_paddings).sum())
-            n_correct_labels = int(
-                ((predicted_labels == unmasked_label_paddings) & (predicted_heads == unmasked_head_paddings)).sum())
-
+            n_correct_heads = int((predicted_heads == head_list).sum())
+            n_correct_labels = int(((predicted_labels == label_list) & (predicted_heads == head_list)).sum())
             n_words = int(word_mask_paddings.sum())
-            return n_words, n_correct_heads, n_correct_labels, predicted_heads, predicted_labels
+            # print('uas:', correct_heads/n_words*100)
+            # print('las:', correct_labels/n_words*100)
+        return n_words, n_correct_heads, n_correct_labels, predicted_heads, predicted_labels
 
     def Train(self, n_epochs, logger):
         # If save_dir is None, model will not be saved.
