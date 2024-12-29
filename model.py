@@ -343,10 +343,6 @@ class Dependency_Parsing(nn.Module):
             unmasked_label_scores = unmasked_label_scores[
                 [torch.arange(len(head_list)), head_list]]
     
-            if self.use_grl:
-                unmasked_domain_scores = torch.flatten(domain_scores, 0, 1)[word_mask_paddings]
-                unmasked_domain_paddings = torch.flatten(domain_paddings, 0, 1)[word_mask_paddings]
-    
             # Get predicted heads & labels
             predicted_heads = unmasked_arc_scores.argmax(-1)
             predicted_labels = unmasked_label_scores.argmax(-1)
