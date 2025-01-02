@@ -310,8 +310,6 @@ class Dependency_Parsing(nn.Module):
             label_list = []
             for label in labels:
                 label_list += label
-            if self.use_grl:
-                domain_paddings = torch.tensor([[domain] * max_word_len for domain in domains])
     
             # Getting contexual embedding
             if self.embedding_type in ['bert', 'roberta', 'mamba']:
