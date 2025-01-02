@@ -284,8 +284,7 @@ class Dependency_Parsing(nn.Module):
             words = [sentence['words'] for sentence in data]
             heads = [sentence['heads'] for sentence in data]
             labels = [sentence['labels'] for sentence in data]
-            if self.use_grl:
-                domains = [sentence['domain'] for sentence in data]
+
             # Get length after padding
             n_sentences = len(data)
             max_word_len = max([len(sentence) for sentence in words])
